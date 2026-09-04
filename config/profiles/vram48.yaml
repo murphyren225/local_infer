@@ -1,0 +1,21 @@
+# 48GB class (RTX 6000 Ada / A6000 / 2x24GB treated as single-GPU only).
+# Same models as 24GB but with far more KV cache headroom → longer context
+# and higher concurrency.
+name: 48GB single card (RTX 6000 Ada / A6000)
+match:
+  min_vram_gb: 40
+  max_vram_gb: 52
+
+large:
+  model: Qwen/Qwen3-32B-AWQ
+  revision: main
+  quantization: awq
+  gpu_mem_util: 0.60
+  max_model_len: 32768
+
+small:
+  model: Qwen/Qwen3-8B-AWQ
+  revision: main
+  quantization: awq
+  gpu_mem_util: 0.18
+  max_model_len: 16384

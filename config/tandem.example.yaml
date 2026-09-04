@@ -1,0 +1,42 @@
+# Tandem gateway config. Copy to config/tandem.yaml (or let
+# autotune/autotune.py generate one). Anything omitted falls back to the
+# defaults in gateway/tandem_gateway/defaults.py.
+
+lanes:
+  large:
+    base_url: http://vllm-large:8000/v1
+    model: Qwen/Qwen3-32B-AWQ
+    revision: main          # 教训:锁死版本,上游换权重不该影响你的生产环境
+  small:
+    base_url: http://vllm-small:8000/v1
+    model: Qwen/Qwen3-4B-AWQ
+    revision: main
+
+routing:
+  large_threshold: 3          # heuristic score >= this → large lane
+  max_small_prompt_chars: 6000
+  force_large_on_tools: true
+  extra_large_keywords: []    # add your domain's hard-task words here
+  extra_small_keywords: []    # ...and your high-volume easy tasks here
+
+cache:
+  enabled: true
+  max_entries: 10000
+  ttl_seconds: 3600
+  max_temperature: 0.2        # only near-deterministic requests get cached
+
+escalation:
+  enabled: true
+  uncertainty_patterns:
+    - "我不确定"
+    - "我无法确定"
+    - "无法回答这个问题"
+    - "i'm not sure"
+    - "i am not sure"
+    - "i cannot answer"
+
+# Reference cloud prices (USD per 1M tokens) — used only to estimate what
+# your traffic would have cost on a cloud API (/admin/stats).
+pricing_reference:
+  input_per_m: 3.0
+  output_per_m: 15.0

@@ -1,0 +1,75 @@
+# Tandem: two vLLM instances share one GPU + a routing gateway in front.
+# Model choices and memory fractions come from .env, written by
+# autotune/autotune.py — run that first (or copy .env.example).
+services:
+  vllm-large:
+    image: vllm/vllm-openai:${VLLM_VERSION:-v0.10.1.1}
+    command: >
+      --model ${LARGE_MODEL}
+      --revision ${LARGE_REVISION:-main}
+      --quantization ${LARGE_QUANT:-awq}
+      --gpu-memory-utilization ${LARGE_GPU_UTIL:-0.72}
+      --max-model-len ${LARGE_MAX_LEN:-16384}
+    volumes:
+      - hf-cache:/root/.cache/huggingface
+    environment:
+      - HF_TOKEN=${HF_TOKEN:-}
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8000/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 60          # model download + load can take a long while
+      start_period: 300s
+    restart: unless-stopped
+
+  vllm-small:
+    image: vllm/vllm-openai:${VLLM_VERSION:-v0.10.1.1}
+    command: >
+      --model ${SMALL_MODEL}
+      --revision ${SMALL_REVISION:-main}
+      --quantization ${SMALL_QUANT:-awq}
+      --gpu-memory-utilization ${SMALL_GPU_UTIL:-0.16}
+      --max-model-len ${SMALL_MAX_LEN:-8192}
+    volumes:
+      - hf-cache:/root/.cache/huggingface
+    environment:
+      - HF_TOKEN=${HF_TOKEN:-}
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8000/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 60
+      start_period: 180s
+    restart: unless-stopped
+
+  gateway:
+    build: ./gateway
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./config:/app/config:ro
+    environment:
+      - TANDEM_CONFIG=/app/config/tandem.yaml
+    depends_on:
+      vllm-large:
+        condition: service_healthy
+      vllm-small:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  hf-cache:

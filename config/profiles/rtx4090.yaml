@@ -1,0 +1,22 @@
+# RTX 4090 / RTX 3090 class: 24GB VRAM.
+# Budget: 32B-AWQ weights ~18GB + 4B-AWQ ~3GB + KV cache + CUDA overhead.
+# gpu_mem_util here is vLLM's per-instance fraction of TOTAL VRAM —
+# the two instances must sum well below 1.0.
+name: 24GB single card (RTX 4090 / 3090)
+match:
+  min_vram_gb: 22
+  max_vram_gb: 26
+
+large:
+  model: Qwen/Qwen3-32B-AWQ
+  revision: main            # 上线前锁成具体 commit hash，防止上游悄悄换权重
+  quantization: awq
+  gpu_mem_util: 0.72
+  max_model_len: 16384
+
+small:
+  model: Qwen/Qwen3-4B-AWQ
+  revision: main
+  quantization: awq
+  gpu_mem_util: 0.16
+  max_model_len: 8192

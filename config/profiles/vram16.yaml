@@ -1,0 +1,20 @@
+# 16GB class (RTX 4080 / 4070 Ti Super / A4000).
+# 32B does not fit; drop the large lane to 14B-AWQ (~9GB).
+name: 16GB single card (RTX 4080 class)
+match:
+  min_vram_gb: 15
+  max_vram_gb: 18
+
+large:
+  model: Qwen/Qwen3-14B-AWQ
+  revision: main
+  quantization: awq
+  gpu_mem_util: 0.62
+  max_model_len: 12288
+
+small:
+  model: Qwen/Qwen3-1.7B
+  revision: main
+  quantization: null        # 1.7B runs unquantized (~3.4GB bf16)
+  gpu_mem_util: 0.22
+  max_model_len: 8192

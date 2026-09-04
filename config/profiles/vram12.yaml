@@ -1,0 +1,19 @@
+# 12GB class (RTX 4070 / 3060 12GB). Entry-level: 8B-AWQ + 1.7B.
+name: 12GB single card (RTX 4070 class)
+match:
+  min_vram_gb: 11
+  max_vram_gb: 14
+
+large:
+  model: Qwen/Qwen3-8B-AWQ
+  revision: main
+  quantization: awq
+  gpu_mem_util: 0.55
+  max_model_len: 8192
+
+small:
+  model: Qwen/Qwen3-1.7B
+  revision: main
+  quantization: null
+  gpu_mem_util: 0.30
+  max_model_len: 4096
