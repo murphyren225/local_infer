@@ -1,50 +1,52 @@
-# Tandem — 一张卡上的大小模型智能路由网关
+# Tandem — a smart routing gateway for a large + small LLM pair on one GPU
 
-> 大厂验证过的 LLM 降本架构，压缩到一张 RTX 4090 和一条安装命令。
+**English** | [中文](README.zh-CN.md)
 
-**Tandem**（双人自行车）：一大一小两个开源模型共骑一张消费级显卡。小模型当"前台"，处理约八成的高频简单请求；大模型（Qwen3-32B-AWQ）当"专家"，只接真正难的活。中间的网关是"分诊台"——每个请求进来先判难度，再决定给谁，答砸了自动升级重答。
+> The LLM cost-cutting architecture validated at big tech companies, compressed onto a single RTX 4090 and one install command.
 
-这套「小模型打前站 + 智能路由 + 缓存 + 评测守门」的组合，Uber 用它把每千次请求成本降了 34%，OpenAI 把 router 直接内置进了 GPT-5；区别只是他们靠几百人的平台团队实现，Tandem 把同样的设计压缩到单卡自托管。
+**Tandem** (as in a tandem bicycle): one large and one small open-source model share a single consumer GPU. The small model works the "front desk," handling the ~80% of traffic that is high-frequency, simple work; the large model (Qwen3-32B-AWQ) is the "expert" that only takes the genuinely hard jobs. The gateway in between is the triage desk — every request gets a difficulty assessment before it is dispatched, and a botched answer is automatically retried on the large model.
 
-## 架构
+This combination — small model up front + smart routing + caching + eval gating — is how Uber cut cost per thousand requests by 34%, and OpenAI built a router directly into GPT-5. The only difference is that they implement it with platform teams of hundreds; Tandem compresses the same design into single-card self-hosting.
+
+## Architecture
 
 ```mermaid
 flowchart LR
-    C[客户端<br/>OpenAI 兼容 API] --> G[Gateway :8080]
-    G --> K{缓存命中?}
-    K -- 是 --> C
-    K -- 否 --> R{路由决策<br/>难度启发式}
-    R -- 简单 ~80% --> S[vLLM small<br/>Qwen3-1.7B-FP8<br/>~3GiB]
-    R -- 困难 ~20% --> L[vLLM large<br/>Qwen3-32B-AWQ<br/>~20.5GiB]
-    S -- 答案不合格 --> E[自动升级重答] --> L
+    C[Client<br/>OpenAI-compatible API] --> G[Gateway :8080]
+    G --> K{Cache hit?}
+    K -- yes --> C
+    K -- no --> R{Route decision<br/>difficulty heuristics}
+    R -- simple ~80% --> S[vLLM small<br/>Qwen3-1.7B-FP8<br/>~3GiB]
+    R -- hard ~20% --> L[vLLM large<br/>Qwen3-32B-AWQ<br/>~20.5GiB]
+    S -- answer fails checks --> E[Auto-escalate] --> L
     S --> C
     L --> C
 ```
 
-两个 vLLM 实例通过 `--gpu-memory-utilization` 分片共存于一张 24GB 卡（实测占用 97.4%），三板斧：FP8 KV cache、`--enforce-eager`、压低 batch 上限。详细显存账目见 [docs/architecture.md](docs/architecture.md)。
+The two vLLM instances co-reside on one 24GB card via `--gpu-memory-utilization` slicing (97.4% measured utilization), made possible by three levers: FP8 KV cache, `--enforce-eager`, and capped batch limits. Full memory accounting in [docs/architecture.md](docs/architecture.md) (Chinese).
 
-## 实测性能（RTX 4090D，双模型共存状态）
+## Measured performance (RTX 4090D, both models co-resident)
 
-| 车道 | 模型 | 上下文 | 首 token 延迟 | 吞吐 |
+| Lane | Model | Context | TTFT | Throughput |
 |---|---|---|---|---|
-| small | Qwen3-1.7B-FP8 | 4096 | 0.15 s | 108 tok/s（4 并发合计） |
-| large | Qwen3-32B-AWQ | 6144 | 0.17 s | 38 tok/s（2 并发合计） |
+| small | Qwen3-1.7B-FP8 | 4096 | 0.15 s | 108 tok/s (4 concurrent, aggregate) |
+| large | Qwen3-32B-AWQ | 6144 | 0.17 s | 38 tok/s (2 concurrent, aggregate) |
 
-一个实测出来的硬结论：**32B-AWQ + 4B-AWQ 在 24GB 上装不下**——4B 的 fp16 词表层和双进程运行时开销比纸面估算多出约 1.4GiB。所以 24GB 档前台用 1.7B-FP8，4B 前台需要 32GB+ 显存（档位见 `config/profiles/`）。
+One hard-won empirical finding: **32B-AWQ + 4B-AWQ does not fit in 24GB** — the 4B model's fp16 vocabulary head and the dual-process runtime overhead add ~1.4GiB over the paper estimate. So the 24GB tier uses 1.7B-FP8 as the front desk; a 4B front desk needs 32GB+ VRAM (see `config/profiles/`).
 
-## 特性
+## Features
 
-- **OpenAI 兼容**：`POST /v1/chat/completions`，`model` 填 `auto` 交给路由，填 `small`/`large` 手动指定。存量代码只改 base_url。
-- **可解释的路由**：每个决策带信号明细（代码块、数学、推理关键词、上下文长度、工具调用……），响应头 `x-tandem-lane` / `x-tandem-reason` 直接可审计。
-- **答案质量兜底**：小模型输出为空、JSON 无效、自报不确定时，自动在大模型上重答（非流式请求）。路由判错的代价从"用户拿到烂答案"降级为"多等几秒"。
-- **精确缓存**：近确定性请求（低 temperature）按内容哈希缓存，批量任务的重复模板直接命中。
-- **省钱看得见**：`GET /admin/stats` 报告各车道请求量、token 数、缓存命中、升级次数，以及"这些流量如果走云端 API 要花多少钱"。
-- **评测守门**：路由策略有带标注的评测集（`evals/`），CI 上每次提交跑，准确率低于 90% 直接拦下——改启发式不会悄悄改坏路由。
-- **首启自动调参**：`autotune` 探测 GPU 型号和显存，从硬件档位（24GB / 16GB / 12GB / 48GB）里选择能装下的最大模型组合。
+- **OpenAI-compatible**: `POST /v1/chat/completions`; set `model` to `auto` for routed dispatch, or `small`/`large` to pick a lane explicitly. Existing code only changes its base_url.
+- **Explainable routing**: every decision carries its signal breakdown (code blocks, math, reasoning keywords, context length, tool use, …), exposed via `x-tandem-lane` / `x-tandem-reason` response headers for auditing.
+- **Answer-quality backstop**: when the small model returns empty output, invalid JSON, or self-reported uncertainty, the request is silently retried on the large model (non-streaming). A routing mistake degrades from "user gets a bad answer" to "user waits a few extra seconds."
+- **Exact-match caching**: near-deterministic requests (low temperature) are cached by content hash; repeated templates in batch jobs hit directly.
+- **Savings you can see**: `GET /admin/stats` reports per-lane request counts, token totals, cache hits, escalations, and "what this traffic would have cost on a cloud API."
+- **Eval gating**: the routing policy ships with a labeled eval set (`evals/`) that CI runs on every push — accuracy below 90% fails the build, so heuristic changes can't silently break routing.
+- **First-boot autotune**: `autotune` probes GPU model and VRAM, then picks the largest model combination that fits from the hardware tiers (12 / 16 / 24 / 48 GB).
 
-## 快速开始
+## Quick start
 
-要求：NVIDIA GPU（12GB+ 显存）、驱动、Docker + NVIDIA Container Toolkit。
+Requirements: NVIDIA GPU (12GB+ VRAM), driver, Docker + NVIDIA Container Toolkit.
 
 ```bash
 git clone https://github.com/murphyren225/local_infer.git
@@ -52,46 +54,54 @@ cd local_infer
 ./install.sh
 ```
 
-首次启动会下载模型权重（24GB 档约 21GB）。然后：
+The first boot downloads model weights (~21GB for the 24GB tier). Then:
 
 ```bash
 curl http://localhost:8080/v1/chat/completions \
   -H 'Content-Type: application/json' \
-  -d '{"model":"auto","messages":[{"role":"user","content":"把这句话翻译成英文：今天天气不错"}]}' -i
+  -d '{"model":"auto","messages":[{"role":"user","content":"Translate to English: 今天天气不错"}]}' -i
 ```
 
-看响应头里的 `x-tandem-lane: small` —— 这条走了小模型，成本几乎为零。
+Check the `x-tandem-lane: small` response header — this one ran on the small model at near-zero cost.
 
-无 GPU 也能开发：路由器、缓存、升级逻辑是纯 Python，单元测试和评测本地直接跑：
+No Docker available (e.g. a rented GPU container)? Use the bare-process path, validated end-to-end on a real machine:
+
+```bash
+pip install vllm && ./scripts/run_bare.sh
+```
+
+Development needs no GPU at all: the router, cache, and escalation logic are pure Python:
 
 ```bash
 PYTHONPATH=gateway python3 -m pytest gateway/tests -q
 python3 evals/run_evals.py --verbose
 ```
 
-## 配置
+## Configuration
 
-`config/tandem.example.yaml` 是全量注释版。最常改的两项：
+`config/tandem.example.yaml` is the fully-commented reference. The two knobs you'll touch first:
 
-- `routing.extra_large_keywords` / `extra_small_keywords`：把你业务里的"难活/简单活"词汇加进去；
-- `lanes.*.revision`：上生产前把模型版本锁成具体 commit hash，上游悄悄换权重不该影响你的环境。
+- `routing.extra_large_keywords` / `extra_small_keywords`: add your domain's "hard task" / "easy task" vocabulary;
+- `lanes.*.revision`: pin model versions to a specific commit hash before production — an upstream weight swap should never silently change your deployment.
 
-## 项目状态（诚实版）
+## Project status (the honest version)
 
-| 部分 | 状态 |
+| Component | Status |
 |---|---|
-| 路由 / 缓存 / 升级逻辑 | ✅ 21 个单元测试 + 28 条路由评测全过（CI 强制） |
-| 网关服务（FastAPI，含流式透传） | ✅ 代码完成，可对接任意 OpenAI 兼容后端 |
-| 24GB 真机端到端（双 vLLM 共卡） | ✅ 2026-09-04 于 RTX 4090D 验证：路由/缓存/流式/统计全通，显存参数已按实测校准 |
-| Docker Compose 路径 | ⚠️ 参数与裸进程路径一致，但 compose 本身未在真机验证（测试机不支持 Docker） |
-| 其他显存档位（12/16/48GB） | ⚠️ 按实测开销外推的估算档，未实测 |
-| Tier-2 路由（小模型难度预判） | 📋 规划中，见 [docs/roadmap.md](docs/roadmap.md) |
+| Routing / cache / escalation logic | ✅ 21 unit tests + 28-case routing eval, all passing (CI-enforced) |
+| Gateway service (FastAPI, incl. streaming passthrough) | ✅ Complete; works against any OpenAI-compatible backend |
+| 24GB real-machine end-to-end (dual vLLM on one card) | ✅ Validated 2026-09-04 on an RTX 4090D: routing/cache/streaming/stats all pass; memory parameters calibrated from measurement |
+| Docker Compose path | ⚠️ Parameters match the bare-process path, but Compose itself is unvalidated (test machine had no Docker) |
+| Other VRAM tiers (12/16/48GB) | ⚠️ Estimated from measured overhead, not yet validated |
+| Tier-2 routing (small-model difficulty pre-judging) | 📋 Planned, see [docs/roadmap.md](docs/roadmap.md) |
 
-## 文档
+## Documentation
 
-- [docs/architecture.md](docs/architecture.md) — 完整系统设计：分层、请求生命周期、显存预算、取舍
-- [docs/routing.md](docs/routing.md) — 三层路由策略与调参方法
-- [docs/roadmap.md](docs/roadmap.md) — v0.1 → v0.4 路线图
+Design docs are currently in Chinese:
+
+- [docs/architecture.md](docs/architecture.md) — full system design: layers, request lifecycle, memory budget, trade-offs
+- [docs/routing.md](docs/routing.md) — the three-tier routing policy and how to tune it
+- [docs/roadmap.md](docs/roadmap.md) — roadmap v0.1 → v0.4
 
 ## License
 
