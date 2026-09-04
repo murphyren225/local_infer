@@ -1,0 +1,28 @@
+{"prompt": "把这段话翻译成英文：我们下周三开会讨论季度预算", "expect": "small", "tag": "translate"}
+{"prompt": "translate to French: The meeting is postponed to Friday.", "expect": "small", "tag": "translate"}
+{"prompt": "总结一下这段话：项目延期到十月，因为供应商交货晚了两周", "expect": "small", "tag": "summarize"}
+{"prompt": "summarize: quarterly revenue grew 12% while costs stayed flat", "expect": "small", "tag": "summarize"}
+{"prompt": "帮我改写得更正式一点：老板，这事儿办不了", "expect": "small", "tag": "rewrite"}
+{"prompt": "润色这句话：感谢您的来信，我们会尽快处理", "expect": "small", "tag": "rewrite"}
+{"prompt": "这句话有错别字吗：今天天汽真好", "expect": "small", "tag": "proofread"}
+{"prompt": "fix typo: I beleive this answer is corect", "expect": "small", "tag": "proofread"}
+{"prompt": "classify this review as positive or negative: great product, fast shipping", "expect": "small", "tag": "classify"}
+{"prompt": "这条评论是好评还是差评：物流太慢了，包装也破了", "expect": "small", "tag": "classify"}
+{"prompt": "提取这句话里的人名：昨天张伟和李娜一起去了上海出差", "expect": "small", "tag": "extract"}
+{"prompt": "extract all email addresses from: contact us at sales@example.com or ops@example.com", "expect": "small", "tag": "extract"}
+{"prompt": "把下面的日期格式化成 YYYY-MM-DD：三月五号", "expect": "small", "tag": "format"}
+{"prompt": "把 user_id 转换成驼峰命名", "expect": "small", "tag": "format"}
+{"prompt": "给我的猫起个名字，它是橘色的", "expect": "small", "tag": "chitchat"}
+{"prompt": "写一句祝贺同事升职的话", "expect": "small", "tag": "chitchat"}
+{"prompt": "分析这段 Python 为什么死锁：\n```python\nlock.acquire()\nlock.acquire()\n```", "expect": "large", "tag": "code-reasoning"}
+{"prompt": "重构这段代码并解释每一步的权衡：\n```js\nvar x = eval(input)\n```", "expect": "large", "tag": "code-reasoning"}
+{"prompt": "帮我评审这个数据库 schema 设计的权衡：\n```sql\nCREATE TABLE orders (id INT, data JSON);\n```", "expect": "large", "tag": "code-reasoning"}
+{"prompt": "证明 √2 是无理数", "expect": "large", "tag": "math"}
+{"prompt": "Prove that the sum of two even numbers is even, step by step.", "expect": "large", "tag": "math"}
+{"prompt": "请深入分析微服务和单体架构的利弊，并给出技术选型建议", "expect": "large", "tag": "analysis"}
+{"prompt": "为什么我们的 API 延迟突然涨了 10 倍？帮我做根因分析", "expect": "large", "tag": "analysis"}
+{"prompt": "why does my docker build fail with exit code 137? analyze the root cause", "expect": "large", "tag": "analysis"}
+{"prompt": "分析这份合同里的违约条款风险", "expect": "large", "tag": "legal"}
+{"prompt": "审计这份智能合约的安全风险：\n```solidity\nfunction withdraw() public { msg.sender.call{value: balance}(\"\"); }\n```", "expect": "large", "tag": "legal"}
+{"prompt": "帮我查一下明天的天气", "expect": "large", "tag": "tools", "extra": {"tools": [{"type": "function", "function": {"name": "get_weather"}}]}}
+{"prompt": "总结这份财报：营收数据 ", "expect": "large", "tag": "long-context", "repeat": 1500}
