@@ -1,22 +1,45 @@
-# RTX 4090 / RTX 3090 class: 24GB VRAM.
-# Budget: 32B-AWQ weights ~18GB + 4B-AWQ ~3GB + KV cache + CUDA overhead.
-# gpu_mem_util here is vLLM's per-instance fraction of TOTAL VRAM —
-# the two instances must sum well below 1.0.
-name: 24GB single card (RTX 4090 / 3090)
+# 24GB single card (RTX 4090 / 4090D / 3090)
+#
+# ✅ 实测校准: 2026-09-04, AutoDL RTX 4090D, vLLM 0.28.0, driver 595.71
+#
+# 实测结论(重要): 32B-AWQ + 4B-AWQ 在 24GB 上装不下——
+#   32B 运行时权重 17.7 GiB + 4B 运行时权重 3.2 GiB(纸面 2.5GB, 但 fp16
+#   词表层再吃 0.74 GiB) + 双进程 CUDA 上下文 ~1 GiB + vLLM 工作区
+#   ≈ 24.9 GiB > 23.5 GiB 可用。4B 做前台需要 32GB+ 显存(见 vram48)。
+#   24GB 档的前台因此换成 Qwen3-1.7B-FP8。
+#
+# 共存实测: 显存 23933/24564 MiB(97.4%);
+#   大车道 KV 6384 tokens(6144 ctx), 小车道 KV 10128 tokens(4096 ctx, 2.5x 并发)
+# 基线(4090D, 双模型共存): 小 TTFT 0.15s / 108 tok/s@c4;
+#   大 TTFT 0.17s / 38 tok/s@c2
+name: 24GB single card (RTX 4090 / 4090D / 3090)
 match:
   min_vram_gb: 22
   max_vram_gb: 26
+validated: "2026-09-04 RTX 4090D, vLLM 0.28.0"
+
+env:
+  # 每进程再省下碎片开销;24GB 上两实例共存是贴线运行,必开
+  PYTORCH_CUDA_ALLOC_CONF: expandable_segments:True
 
 large:
   model: Qwen/Qwen3-32B-AWQ
   revision: main            # 上线前锁成具体 commit hash，防止上游悄悄换权重
-  quantization: awq
-  gpu_mem_util: 0.72
-  max_model_len: 16384
+  quantization: auto        # 交给 vLLM 自动选 awq_marlin 快内核
+  gpu_mem_util: 0.83
+  max_model_len: 6144
+  kv_cache_dtype: fp8       # KV 显存减半,6K 上下文的关键
+  max_num_seqs: 16
+  max_num_batched_tokens: 2048
+  enforce_eager: true       # 省掉 CUDA graph 的 1-2GiB
 
 small:
-  model: Qwen/Qwen3-4B-AWQ
+  model: Qwen/Qwen3-1.7B-FP8
   revision: main
-  quantization: awq
-  gpu_mem_util: 0.16
-  max_model_len: 8192
+  quantization: auto
+  gpu_mem_util: 0.11        # 实测 0.118 会 OOM(记账外 CUDA 上下文 ~0.45GiB)
+  max_model_len: 4096
+  kv_cache_dtype: fp8
+  max_num_seqs: 8
+  max_num_batched_tokens: 512
+  enforce_eager: true

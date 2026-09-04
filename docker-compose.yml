@@ -5,15 +5,19 @@ services:
   vllm-large:
     image: vllm/vllm-openai:${VLLM_VERSION:-v0.10.1.1}
     command: >
-      --model ${LARGE_MODEL}
+      --model ${LARGE_MODEL:-Qwen/Qwen3-32B-AWQ}
       --revision ${LARGE_REVISION:-main}
-      --quantization ${LARGE_QUANT:-awq}
-      --gpu-memory-utilization ${LARGE_GPU_UTIL:-0.72}
-      --max-model-len ${LARGE_MAX_LEN:-16384}
+      --gpu-memory-utilization ${LARGE_GPU_UTIL:-0.83}
+      --max-model-len ${LARGE_MAX_LEN:-6144}
+      --kv-cache-dtype ${LARGE_KV_DTYPE:-fp8}
+      --max-num-seqs ${LARGE_MAX_SEQS:-16}
+      --max-num-batched-tokens ${LARGE_MAX_BATCHED:-2048}
+      --enforce-eager
     volumes:
       - hf-cache:/root/.cache/huggingface
     environment:
       - HF_TOKEN=${HF_TOKEN:-}
+      - PYTORCH_CUDA_ALLOC_CONF=${PYTORCH_CUDA_ALLOC_CONF:-expandable_segments:True}
     deploy:
       resources:
         reservations:
@@ -32,15 +36,19 @@ services:
   vllm-small:
     image: vllm/vllm-openai:${VLLM_VERSION:-v0.10.1.1}
     command: >
-      --model ${SMALL_MODEL}
+      --model ${SMALL_MODEL:-Qwen/Qwen3-1.7B-FP8}
       --revision ${SMALL_REVISION:-main}
-      --quantization ${SMALL_QUANT:-awq}
-      --gpu-memory-utilization ${SMALL_GPU_UTIL:-0.16}
-      --max-model-len ${SMALL_MAX_LEN:-8192}
+      --gpu-memory-utilization ${SMALL_GPU_UTIL:-0.11}
+      --max-model-len ${SMALL_MAX_LEN:-4096}
+      --kv-cache-dtype ${SMALL_KV_DTYPE:-fp8}
+      --max-num-seqs ${SMALL_MAX_SEQS:-8}
+      --max-num-batched-tokens ${SMALL_MAX_BATCHED:-512}
+      --enforce-eager
     volumes:
       - hf-cache:/root/.cache/huggingface
     environment:
       - HF_TOKEN=${HF_TOKEN:-}
+      - PYTORCH_CUDA_ALLOC_CONF=${PYTORCH_CUDA_ALLOC_CONF:-expandable_segments:True}
     deploy:
       resources:
         reservations:

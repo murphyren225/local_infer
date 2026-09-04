@@ -2,7 +2,7 @@
 
 > 大厂验证过的 LLM 降本架构，压缩到一张 RTX 4090 和一条安装命令。
 
-**Tandem**（双人自行车）：一大一小两个开源模型共骑一张消费级显卡。小模型（Qwen3-4B）当"前台"，处理约八成的高频简单请求；大模型（Qwen3-32B-AWQ）当"专家"，只接真正难的活。中间的网关是"分诊台"——每个请求进来先判难度，再决定给谁，答砸了自动升级重答。
+**Tandem**（双人自行车）：一大一小两个开源模型共骑一张消费级显卡。小模型当"前台"，处理约八成的高频简单请求；大模型（Qwen3-32B-AWQ）当"专家"，只接真正难的活。中间的网关是"分诊台"——每个请求进来先判难度，再决定给谁，答砸了自动升级重答。
 
 这套「小模型打前站 + 智能路由 + 缓存 + 评测守门」的组合，Uber 用它把每千次请求成本降了 34%，OpenAI 把 router 直接内置进了 GPT-5；区别只是他们靠几百人的平台团队实现，Tandem 把同样的设计压缩到单卡自托管。
 
@@ -14,14 +14,23 @@ flowchart LR
     G --> K{缓存命中?}
     K -- 是 --> C
     K -- 否 --> R{路由决策<br/>难度启发式}
-    R -- 简单 ~80% --> S[vLLM small<br/>Qwen3-4B-AWQ<br/>~3GB]
-    R -- 困难 ~20% --> L[vLLM large<br/>Qwen3-32B-AWQ<br/>~18GB]
+    R -- 简单 ~80% --> S[vLLM small<br/>Qwen3-1.7B-FP8<br/>~3GiB]
+    R -- 困难 ~20% --> L[vLLM large<br/>Qwen3-32B-AWQ<br/>~20.5GiB]
     S -- 答案不合格 --> E[自动升级重答] --> L
     S --> C
     L --> C
 ```
 
-单张 24GB 卡的显存预算：32B-AWQ 权重约 18GB + 4B-AWQ 约 3GB，剩余留给 KV cache。两个 vLLM 实例通过 `--gpu-memory-utilization` 分片共存。
+两个 vLLM 实例通过 `--gpu-memory-utilization` 分片共存于一张 24GB 卡（实测占用 97.4%），三板斧：FP8 KV cache、`--enforce-eager`、压低 batch 上限。详细显存账目见 [docs/architecture.md](docs/architecture.md)。
+
+## 实测性能（RTX 4090D，双模型共存状态）
+
+| 车道 | 模型 | 上下文 | 首 token 延迟 | 吞吐 |
+|---|---|---|---|---|
+| small | Qwen3-1.7B-FP8 | 4096 | 0.15 s | 108 tok/s（4 并发合计） |
+| large | Qwen3-32B-AWQ | 6144 | 0.17 s | 38 tok/s（2 并发合计） |
+
+一个实测出来的硬结论：**32B-AWQ + 4B-AWQ 在 24GB 上装不下**——4B 的 fp16 词表层和双进程运行时开销比纸面估算多出约 1.4GiB。所以 24GB 档前台用 1.7B-FP8，4B 前台需要 32GB+ 显存（档位见 `config/profiles/`）。
 
 ## 特性
 
@@ -73,7 +82,9 @@ python3 evals/run_evals.py --verbose
 |---|---|
 | 路由 / 缓存 / 升级逻辑 | ✅ 21 个单元测试 + 28 条路由评测全过（CI 强制） |
 | 网关服务（FastAPI，含流式透传） | ✅ 代码完成，可对接任意 OpenAI 兼容后端 |
-| 4090 上的端到端验证（双 vLLM 共卡） | ⚠️ 尚未在真机上跑通，显存分片参数待实测校准 |
+| 24GB 真机端到端（双 vLLM 共卡） | ✅ 2026-09-04 于 RTX 4090D 验证：路由/缓存/流式/统计全通，显存参数已按实测校准 |
+| Docker Compose 路径 | ⚠️ 参数与裸进程路径一致，但 compose 本身未在真机验证（测试机不支持 Docker） |
+| 其他显存档位（12/16/48GB） | ⚠️ 按实测开销外推的估算档，未实测 |
 | Tier-2 路由（小模型难度预判） | 📋 规划中，见 [docs/roadmap.md](docs/roadmap.md) |
 
 ## 文档

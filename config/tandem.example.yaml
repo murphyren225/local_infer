@@ -9,7 +9,7 @@ lanes:
     revision: main          # 教训:锁死版本,上游换权重不该影响你的生产环境
   small:
     base_url: http://vllm-small:8000/v1
-    model: Qwen/Qwen3-4B-AWQ
+    model: Qwen/Qwen3-1.7B-FP8   # 24GB 档实测组合;32GB+ 显存可换 Qwen3-4B-AWQ
     revision: main
 
 routing:

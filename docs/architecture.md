@@ -24,7 +24,7 @@
 │  Backends     lane = base_url + model id    │
 ├──────────────────────┬──────────────────────┤
 │  vLLM small          │  vLLM large          │
-│  Qwen3-4B-AWQ ~3GB   │  Qwen3-32B-AWQ ~18GB │
+│  Qwen3-1.7B-FP8 ~3GiB│  Qwen3-32B-AWQ ~20GiB│
 ├──────────────────────┴──────────────────────┤
 │  1x GPU (24GB) — 按 gpu_mem_util 分片        │
 └─────────────────────────────────────────────┘
@@ -64,16 +64,30 @@ sequenceDiagram
 
 流式请求：路由决策照常，但跳过缓存与升级（字节已经发出去就收不回来），预生成决策即为最终决策。
 
-## 4. 显存预算（24GB 档）
+## 4. 显存预算（24GB 档，2026-09-04 于 RTX 4090D + vLLM 0.28 实测）
 
-| 项 | 估算 |
-|---|---|
-| Qwen3-32B-AWQ 权重（4-bit） | ~18 GB |
-| Qwen3-4B-AWQ 权重 | ~3 GB |
-| KV cache（两实例合计） | ~2 GB |
-| CUDA/vLLM 开销 | ~1 GB |
+先说实测推翻的纸面估算：**32B-AWQ + 4B-AWQ 在 24GB 上装不下**。
 
-两实例通过 vLLM `--gpu-memory-utilization` 分片（0.72 / 0.16）。这是全系统最紧的约束，**数字需要真机校准**——32B 的 `max_model_len` 16K 在高并发下可能触发 KV 驱逐，届时优先降 max_model_len 而不是降量化精度。其他显存档位见 `config/profiles/`。
+| 项 | 纸面估算 | 实测 |
+|---|---|---|
+| Qwen3-32B-AWQ 运行时权重 | ~18 GB | 17.7 GiB |
+| Qwen3-4B-AWQ 运行时权重 | ~2.5 GB | **3.2 GiB**（fp16 词表层再吃 0.74 GiB） |
+| 每进程 CUDA 上下文（记账外） | 被忽略 | ~0.45 GiB × 2 |
+| vLLM 激活/采样工作区 | 被忽略 | ~1 GiB（压过 batch 参数后） |
+
+合计 ≈ 24.9 GiB > 23.5 GiB 可用，缺口约 1 GiB，任何参数都填不平。
+教训：**量化模型的"纸面大小"不含 fp16 词表层和运行时开销，预算要按实测算**。
+
+24GB 档最终落地组合（`config/profiles/rtx4090.yaml`，共存实测 23933/24564 MiB）：
+
+| 车道 | 模型 | util | ctx | KV | 关键参数 |
+|---|---|---|---|---|---|
+| large | Qwen3-32B-AWQ | 0.83 | 6144 | 6384 tokens (fp8) | `--enforce-eager --max-num-batched-tokens 2048` |
+| small | Qwen3-1.7B-FP8 | 0.11 | 4096 | 10128 tokens (fp8)，2.5 路并发 | `--max-num-batched-tokens 512` |
+
+三个省显存的关键手段（缺一不可）：FP8 KV cache（KV 减半）、`--enforce-eager`（省 CUDA graph 1–2 GiB）、压低 `max-num-seqs`/`max-num-batched-tokens`（默认值按上千并发预留激活，单卡场景纯浪费）。
+
+想用 4B 当前台需要 32GB+ 显存（见 `vram48.yaml`）。其他档位是按实测开销外推的估算档，标注在各 profile 头部。
 
 ## 5. 评测守门
 

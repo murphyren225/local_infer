@@ -1,21 +1,31 @@
-# 48GB class (RTX 6000 Ada / A6000 / 2x24GB treated as single-GPU only).
-# Same models as 24GB but with far more KV cache headroom → longer context
-# and higher concurrency.
+# 48GB class (RTX 6000 Ada / A6000). ⚠️ 估算档,未实测。
+# 显存充裕:32B 拉满上下文,前台用 4B(24GB 档装不下的组合在这里成立)。
 name: 48GB single card (RTX 6000 Ada / A6000)
 match:
   min_vram_gb: 40
   max_vram_gb: 52
 
+env:
+  PYTORCH_CUDA_ALLOC_CONF: expandable_segments:True
+
 large:
   model: Qwen/Qwen3-32B-AWQ
   revision: main
-  quantization: awq
-  gpu_mem_util: 0.60
+  quantization: auto
+  gpu_mem_util: 0.55
   max_model_len: 32768
+  kv_cache_dtype: fp8
+  max_num_seqs: 32
+  max_num_batched_tokens: 4096
+  enforce_eager: false      # 有余量,保留 CUDA graph 换吞吐
 
 small:
-  model: Qwen/Qwen3-8B-AWQ
+  model: Qwen/Qwen3-4B-AWQ  # 运行时约 4GiB(含 fp16 词表层)
   revision: main
-  quantization: awq
-  gpu_mem_util: 0.18
-  max_model_len: 16384
+  quantization: auto
+  gpu_mem_util: 0.14
+  max_model_len: 8192
+  kv_cache_dtype: fp8
+  max_num_seqs: 16
+  max_num_batched_tokens: 1024
+  enforce_eager: false

@@ -1,20 +1,31 @@
-# 16GB class (RTX 4080 / 4070 Ti Super / A4000).
-# 32B does not fit; drop the large lane to 14B-AWQ (~9GB).
+# 16GB class (RTX 4080 / 4070 Ti Super / A4000). ⚠️ 估算档,未实测。
+# 按 24GB 档实测的运行时开销外推:14B-AWQ ~9.3GiB + 1.7B-FP8 ~3GiB。
 name: 16GB single card (RTX 4080 class)
 match:
   min_vram_gb: 15
   max_vram_gb: 18
 
+env:
+  PYTORCH_CUDA_ALLOC_CONF: expandable_segments:True
+
 large:
   model: Qwen/Qwen3-14B-AWQ
   revision: main
-  quantization: awq
-  gpu_mem_util: 0.62
-  max_model_len: 12288
+  quantization: auto
+  gpu_mem_util: 0.68
+  max_model_len: 8192
+  kv_cache_dtype: fp8
+  max_num_seqs: 16
+  max_num_batched_tokens: 2048
+  enforce_eager: true
 
 small:
-  model: Qwen/Qwen3-1.7B
+  model: Qwen/Qwen3-1.7B-FP8
   revision: main
-  quantization: null        # 1.7B runs unquantized (~3.4GB bf16)
-  gpu_mem_util: 0.22
-  max_model_len: 8192
+  quantization: auto
+  gpu_mem_util: 0.17
+  max_model_len: 4096
+  kv_cache_dtype: fp8
+  max_num_seqs: 8
+  max_num_batched_tokens: 512
+  enforce_eager: true

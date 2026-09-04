@@ -17,7 +17,7 @@ DEFAULTS: dict[str, Any] = {
     "lanes": {
         "small": {
             "base_url": "http://vllm-small:8000/v1",
-            "model": "Qwen/Qwen3-4B-AWQ",
+            "model": "Qwen/Qwen3-1.7B-FP8",
             "revision": "main",
         },
         "large": {
