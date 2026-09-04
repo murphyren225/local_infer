@@ -52,10 +52,28 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="Tandem Gateway", version=__version__, lifespan=lifespan)
 
 
-def _headers(lane: str, reason: str, **extra: str) -> dict[str, str]:
-    headers = {"x-tandem-lane": lane, "x-tandem-reason": reason}
+PROTOCOL_VERSION = "1"  # docs/agent-interface.md
+
+
+def _headers(lane: str, reason: str, session: str | None = None, **extra: str) -> dict[str, str]:
+    headers = {
+        "x-tandem-protocol": PROTOCOL_VERSION,
+        "x-tandem-lane": lane,
+        "x-tandem-reason": reason,
+    }
+    if session:
+        headers["x-tandem-session"] = session
     headers.update(extra)
     return headers
+
+
+def _agent_headers(request: Request) -> tuple[str | None, str | None]:
+    """Extract (hint, session) protocol extension headers."""
+    hint = request.headers.get("x-tandem-hint")
+    session = request.headers.get("x-tandem-session")
+    if session:
+        session = session[:128]
+    return hint, session
 
 
 @app.get("/healthz")
@@ -83,7 +101,18 @@ async def admin_stats(request: Request) -> dict[str, Any]:
 async def route_preview(request: Request) -> dict[str, Any]:
     """Return the routing decision for a payload without running inference."""
     payload = await request.json()
-    return decide(payload, request.app.state.cfg).as_dict()
+    hint, _ = _agent_headers(request)
+    return decide(payload, request.app.state.cfg, hint).as_dict()
+
+
+@app.get("/admin/sessions/{session_id}")
+async def session_stats(session_id: str, request: Request):
+    """Per-session ledger (protocol §2.4) — an agent task's cost, one call."""
+    stats: Stats = request.app.state.stats
+    snapshot = stats.session_snapshot(session_id)
+    if snapshot is None:
+        return JSONResponse({"error": {"message": "unknown session"}}, status_code=404)
+    return {"session": session_id, **snapshot}
 
 
 @app.post("/v1/chat/completions")
@@ -94,7 +123,8 @@ async def chat_completions(request: Request):
     backends: dict[str, LaneBackend] = request.app.state.backends
     cache: ResponseCache = request.app.state.cache
 
-    decision = decide(payload, cfg)
+    hint, session = _agent_headers(request)
+    decision = decide(payload, cfg, hint)
     stats.record_decision(decision.reason)
     backend = backends.get(decision.lane)
     if backend is None:
@@ -103,10 +133,14 @@ async def chat_completions(request: Request):
         )
 
     if payload.get("stream"):
+        # Streamed usage isn't visible to the gateway; the session ledger
+        # records the request itself (callers wanting stream token counts
+        # set stream_options.include_usage and read it client-side).
+        stats.record_session(session, decision.lane)
         return StreamingResponse(
             backend.stream(payload),
             media_type="text/event-stream",
-            headers=_headers(decision.lane, decision.reason),
+            headers=_headers(decision.lane, decision.reason, session),
         )
 
     use_cache = cacheable(payload, cfg["cache"])
@@ -115,8 +149,12 @@ async def chat_completions(request: Request):
         cached = cache.get(key)
         if cached is not None:
             stats.cache_hits += 1
+            stats.record_session(session, decision.lane, cache_hit=True)
             return JSONResponse(
-                cached, headers=_headers(decision.lane, decision.reason, **{"x-tandem-cache": "hit"})
+                cached,
+                headers=_headers(
+                    decision.lane, decision.reason, session, **{"x-tandem-cache": "hit"}
+                ),
             )
 
     try:
@@ -144,8 +182,13 @@ async def chat_completions(request: Request):
                 escalated_reason = f"{escalated_reason} (retry-failed)"
 
     stats.record_usage(decision.lane, response.get("usage"))
+    stats.record_session(
+        session, decision.lane, response.get("usage"), escalated=bool(escalated_reason)
+    )
     if key is not None:
         cache.put(key, response)
 
     extra = {"x-tandem-escalated": escalated_reason} if escalated_reason else {}
-    return JSONResponse(response, headers=_headers(decision.lane, decision.reason, **extra))
+    return JSONResponse(
+        response, headers=_headers(decision.lane, decision.reason, session, **extra)
+    )

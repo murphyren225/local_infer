@@ -101,6 +101,7 @@ Design docs are currently in Chinese:
 
 - [docs/architecture.md](docs/architecture.md) — full system design: layers, request lifecycle, memory budget, trade-offs
 - [docs/routing.md](docs/routing.md) — the three-tier routing policy and how to tune it
+- [docs/agent-interface.md](docs/agent-interface.md) — agent protocol v1: `x-tandem-hint` step-level routing, `x-tandem-session` per-task ledgers, and the orchestrator blueprint (implemented gateway-side)
 - [docs/roadmap.md](docs/roadmap.md) — roadmap v0.1 → v0.4
 
 ## License

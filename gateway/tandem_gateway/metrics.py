@@ -10,8 +10,11 @@ Durable metrics (Prometheus export) is a v0.2 roadmap item.
 from __future__ import annotations
 
 import time
+from collections import OrderedDict
 from dataclasses import dataclass, field
 from typing import Any
+
+MAX_SESSIONS = 1000  # LRU cap for per-session ledgers (protocol §2.4)
 
 
 @dataclass
@@ -29,6 +32,7 @@ class Stats:
     cache_hits: int = 0
     escalations: int = 0
     decisions: dict[str, int] = field(default_factory=dict)  # reason -> count
+    sessions: "OrderedDict[str, dict[str, Any]]" = field(default_factory=OrderedDict)
 
     def lane(self, name: str) -> LaneStats:
         return self.lanes.setdefault(name, LaneStats())
@@ -44,6 +48,43 @@ class Stats:
         if usage:
             stats.prompt_tokens += int(usage.get("prompt_tokens") or 0)
             stats.completion_tokens += int(usage.get("completion_tokens") or 0)
+
+    def record_session(
+        self,
+        session: str | None,
+        lane: str,
+        usage: dict[str, Any] | None = None,
+        cache_hit: bool = False,
+        escalated: bool = False,
+    ) -> None:
+        if not session:
+            return
+        entry = self.sessions.setdefault(
+            session,
+            {
+                "requests": 0,
+                "lanes": {},
+                "prompt_tokens": 0,
+                "completion_tokens": 0,
+                "cache_hits": 0,
+                "escalations": 0,
+            },
+        )
+        entry["requests"] += 1
+        entry["lanes"][lane] = entry["lanes"].get(lane, 0) + 1
+        if usage:
+            entry["prompt_tokens"] += int(usage.get("prompt_tokens") or 0)
+            entry["completion_tokens"] += int(usage.get("completion_tokens") or 0)
+        if cache_hit:
+            entry["cache_hits"] += 1
+        if escalated:
+            entry["escalations"] += 1
+        self.sessions.move_to_end(session)
+        while len(self.sessions) > MAX_SESSIONS:
+            self.sessions.popitem(last=False)
+
+    def session_snapshot(self, session: str) -> dict[str, Any] | None:
+        return self.sessions.get(session)
 
     def snapshot(self, pricing: dict[str, Any]) -> dict[str, Any]:
         input_rate = float(pricing.get("input_per_m", 0.0))
@@ -68,5 +109,6 @@ class Stats:
             "cache_hits": self.cache_hits,
             "escalations": self.escalations,
             "decision_reasons": dict(self.decisions),
+            "active_sessions": len(self.sessions),
             "estimated_cloud_cost_usd": round(would_have_cost, 4),
         }

@@ -99,6 +99,7 @@ python3 evals/run_evals.py --verbose
 
 - [docs/architecture.md](docs/architecture.md) — 完整系统设计：分层、请求生命周期、显存预算、取舍
 - [docs/routing.md](docs/routing.md) — 三层路由策略与调参方法
+- [docs/agent-interface.md](docs/agent-interface.md) — Agent 协议 v1：`x-tandem-hint` 步骤级路由、`x-tandem-session` 任务账本、编排器蓝图（网关侧已实现）
 - [docs/roadmap.md](docs/roadmap.md) — v0.1 → v0.4 路线图
 
 ## License
