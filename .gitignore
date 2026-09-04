@@ -1,0 +1,14 @@
+# generated at install time
+.env
+config/tandem.yaml
+
+# python
+__pycache__/
+*.pyc
+*.egg-info/
+.pytest_cache/
+.venv/
+
+# misc
+.DS_Store
+evals/last_report.md
