@@ -9,7 +9,7 @@
           "id": "auto",
           "name": "Home Auto (small→large escalation)",
           "input": ["text"],
-          "contextWindow": 6144,
+          "contextWindow": 5120,
           "maxTokens": 1024,
           "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 }
         },
@@ -25,7 +25,7 @@
           "id": "large",
           "name": "Home Large (Qwen3-32B-AWQ)",
           "input": ["text"],
-          "contextWindow": 6144,
+          "contextWindow": 5120,
           "maxTokens": 1024,
           "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 }
         },

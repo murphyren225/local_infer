@@ -57,8 +57,8 @@ if curl -sf "http://127.0.0.1:$LARGE_PORT/health" >/dev/null 2>&1; then
 else
 nohup vllm serve "$LARGE_MODEL_PATH" \
   --served-model-name "$LARGE_NAME" \
-  --gpu-memory-utilization 0.83 --max-model-len 6144 \
-  --kv-cache-dtype fp8 --max-num-seqs 16 --max-num-batched-tokens 2048 \
+  --gpu-memory-utilization 0.81 --max-model-len 5120 \
+  --kv-cache-dtype fp8 --max-num-seqs 8 --max-num-batched-tokens 1024 \
   --reasoning-parser qwen3 --default-chat-template-kwargs "{\"enable_thinking\": false}" \
   --enable-auto-tool-choice --tool-call-parser hermes \
   --enforce-eager --port $LARGE_PORT \
