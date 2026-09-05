@@ -12,4 +12,4 @@ __pycache__/
 # misc
 .DS_Store
 evals/last_report.md
-homed/routes.generated.yaml
+homed/router/routes.generated.yaml

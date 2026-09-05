@@ -64,11 +64,74 @@ t_pi() {
   fi
 }
 
+t_console() {
+  echo "== 控制台: 集群状态 =="
+  curl -s http://127.0.0.1:6006/api/status | "$PY" -c \
+    'import json,sys; d=json.load(sys.stdin); print("  mode:", d["mode"], " lanes:", d["lanes"], " 升级事件数:", len(d["escalations"]))'
+  echo "== 控制台: 文件上传 + 让模型总结 =="
+  printf "第一季度营收 120 万,成本 80 万,利润 40 万。\n第二季度营收 150 万,成本 90 万,利润 60 万。\n" > /tmp/report.txt
+  UPLOADED=$(curl -s -F "file=@/tmp/report.txt" http://127.0.0.1:6006/api/upload)
+  echo "$UPLOADED" | "$PY" -c \
+    'import json,sys; d=json.load(sys.stdin); print("  uploaded:", d["name"], d["chars"], "chars")'
+  TEXT=$(echo "$UPLOADED" | "$PY" -c 'import json,sys; print(json.load(sys.stdin)["text"])')
+  curl -s http://127.0.0.1:6006/api/chat -H 'Content-Type: application/json' \
+    -d "$("$PY" -c "import json,sys; print(json.dumps({'model':'small','messages':[{'role':'user','content':'总结这份报表的要点:'+open('/tmp/report.txt').read()}],'max_tokens':256}))")" \
+  | "$PY" -c '
+import json,sys
+d=json.load(sys.stdin)
+print("  answered-by:", d.get("model"), " 延迟:", d.get("_console",{}).get("latency_ms"), "ms")
+print("  answer:", " ".join((d["choices"][0]["message"].get("content") or "").split())[:150])'
+}
+
+t_failover() {
+  echo "== 兜底演练: 故意杀掉 32B,看路由是否自动切换 =="
+  kill "$(cat logs/vllm-large.pid 2>/dev/null)" 2>/dev/null || pkill -f "qwen3-32[b]" || true
+  echo "  已杀掉大模型,等看门狗切换(最多 90 秒)..."
+  for i in $(seq 1 18); do
+    MODE=$(cat logs/cluster_mode 2>/dev/null)
+    [ "$MODE" != normal ] && [ -n "$MODE" ] && break
+    sleep 5
+  done
+  echo "  当前模式: $(cat logs/cluster_mode)"
+  echo "  降级期间派活给 auto(应由幸存车道/云端接住):"
+  sleep 5   # 路由器重启需要 1-2 秒,稍等再问
+  answered=0
+  for attempt in 1 2 3; do
+    if ask "$GW" auto "说一句话证明你还活着" 64; then answered=1; break; fi
+    echo "  (第 $attempt 次没打通,重试...)"; sleep 5
+  done
+  if [ "$answered" = 0 ]; then
+    if [ -z "${TOGETHER_API_KEY:-}" ]; then
+      echo "  (符合预期: 未配云端 key 时,分段自愈会撤下小模型腾显存,期间短暂停机;"
+      echo "   配上 TOGETHER_API_KEY 后此窗口流量全走云端,零中断)"
+    else
+      echo "  FAIL: 配了云端 key 仍无法应答"; exit 1
+    fi
+  fi
+  echo "  等待看门狗自愈(重新加载 32B,最多 8 分钟)..."
+  for i in $(seq 1 96); do
+    [ "$(cat logs/cluster_mode 2>/dev/null)" = normal ] && break
+    sleep 5
+  done
+  if [ "$(cat logs/cluster_mode)" = normal ]; then
+    echo "  PASS: 已自动恢复正常模式,大模型复活"
+    sleep 5
+    for attempt in 1 2 3; do
+      if ask "$GW" large "说 ok" 32; then break; fi
+      sleep 5
+    done
+  else
+    echo "  FAIL: 8 分钟内未恢复,看 logs/watchdog.log 和 logs/heal.log"; exit 1
+  fi
+}
+
 case "${1:-all}" in
-  small)  t_small ;;
-  large)  t_large ;;
-  router) t_router ;;
-  pi)     t_pi ;;
-  all)    t_small; echo; t_large; echo; t_router; echo; t_pi ;;
-  *) echo "usage: $0 [small|large|router|pi|all]"; exit 1 ;;
+  small)   t_small ;;
+  large)   t_large ;;
+  router)  t_router ;;
+  pi)      t_pi ;;
+  console) t_console ;;
+  failover) t_failover ;;
+  all)    t_small; echo; t_large; echo; t_router; echo; t_console; echo; t_pi ;;
+  *) echo "usage: $0 [small|large|router|pi|console|failover|all]  (failover 是破坏性演练,不含在 all 里)"; exit 1 ;;
 esac

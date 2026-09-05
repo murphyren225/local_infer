@@ -1,108 +1,96 @@
-# Tandem — a smart routing gateway for a large + small LLM pair on one GPU
+# Home AI Cluster — a complete local AI stack on one consumer GPU
 
 **English** | [中文](README.zh-CN.md)
 
-> The LLM cost-cutting architecture validated at big tech companies, compressed onto a single RTX 4090 and one install command.
+> A Claude-Code-grade agent experience on your own hardware: Pi as the entrypoint,
+> Switchyard for smart triage, a large + small open model sharing one GPU, and automatic
+> cloud-API failover when a local model dies. Everything is stock open-source parts —
+> we only build the glue that turns them into one "home AI computer".
+> Validated end-to-end on a real RTX 4090D.
 
-**Tandem** (as in a tandem bicycle): one large and one small open-source model share a single consumer GPU. The small model works the "front desk," handling the ~80% of traffic that is high-frequency, simple work; the large model (Qwen3-32B-AWQ) is the "expert" that only takes the genuinely hard jobs. The gateway in between is the triage desk — every request gets a difficulty assessment before it is dispatched, and a botched answer is automatically retried on the large model.
+## 1. Interfaces
 
-This combination — small model up front + smart routing + caching + eval gating — is how Uber cut cost per thousand requests by 34%, and OpenAI built a router directly into GPT-5. The only difference is that they implement it with platform teams of hundreds; Tandem compresses the same design into single-card self-hosting.
+**Web console (:6006)** — for everyday users and admins: chat with a lane picker
+(`auto`/`small`/`large`/`cloud`), **file upload** (txt/md/csv/json/code, ≤2MB) for
+summarize/analyze tasks, and full routing transparency — every answer is annotated with
+the model that did the work, end-to-end latency and tok/s; a live side panel shows the
+router's current policy, the **escalation event stream** (the judge's verbatim reasons
+for upgrading a task to the 32B), cumulative stats, and a cluster health badge that turns
+orange in degraded mode and explains where traffic is going.
 
-## Architecture
+**`pi` in a terminal** — for developers: a Claude-Code-like coding agent running on your
+own GPU, with real tool execution. `/model` switches lanes.
 
-```mermaid
-flowchart LR
-    C[Client<br/>OpenAI-compatible API] --> G[Gateway :8080]
-    G --> K{Cache hit?}
-    K -- yes --> C
-    K -- no --> R{Route decision<br/>difficulty heuristics}
-    R -- simple ~80% --> S[vLLM small<br/>Qwen3-1.7B-FP8<br/>~3GiB]
-    R -- hard ~20% --> L[vLLM large<br/>Qwen3-32B-AWQ<br/>~20.5GiB]
-    S -- answer fails checks --> E[Auto-escalate] --> L
-    S --> C
-    L --> C
+**OpenAI-compatible API** — for every existing tool:
+
+```
+POST http://<host>:4000/v1/chat/completions    model: auto | small | large | cloud
 ```
 
-The two vLLM instances co-reside on one 24GB card via `--gpu-memory-utilization` slicing (97.4% measured utilization), made possible by three levers: FP8 KV cache, `--enforce-eager`, and capped batch limits. Full memory accounting in [docs/architecture.md](docs/architecture.md) (Chinese).
+Anthropic Messages format is also accepted. That is the entire API surface.
 
-## Measured performance (RTX 4090D, both models co-resident)
+## 2. Measured performance (RTX 4090D 24GB)
 
-| Lane | Model | Context | TTFT | Throughput |
-|---|---|---|---|---|
-| small | Qwen3-1.7B-FP8 | 4096 | 0.15 s | 108 tok/s (4 concurrent, aggregate) |
-| large | Qwen3-32B-AWQ | 6144 | 0.17 s | 38 tok/s (2 concurrent, aggregate) |
-
-One hard-won empirical finding: **32B-AWQ + 4B-AWQ does not fit in 24GB** — the 4B model's fp16 vocabulary head and the dual-process runtime overhead add ~1.4GiB over the paper estimate. So the 24GB tier uses 1.7B-FP8 as the front desk; a 4B front desk needs 32GB+ VRAM (see `config/profiles/`).
-
-## Features
-
-- **OpenAI-compatible**: `POST /v1/chat/completions`; set `model` to `auto` for routed dispatch, or `small`/`large` to pick a lane explicitly. Existing code only changes its base_url.
-- **Explainable routing**: every decision carries its signal breakdown (code blocks, math, reasoning keywords, context length, tool use, …), exposed via `x-tandem-lane` / `x-tandem-reason` response headers for auditing.
-- **Answer-quality backstop**: when the small model returns empty output, invalid JSON, or self-reported uncertainty, the request is silently retried on the large model (non-streaming). A routing mistake degrades from "user gets a bad answer" to "user waits a few extra seconds."
-- **Exact-match caching**: near-deterministic requests (low temperature) are cached by content hash; repeated templates in batch jobs hit directly.
-- **Savings you can see**: `GET /admin/stats` reports per-lane request counts, token totals, cache hits, escalations, and "what this traffic would have cost on a cloud API."
-- **Eval gating**: the routing policy ships with a labeled eval set (`evals/`) that CI runs on every push — accuracy below 90% fails the build, so heuristic changes can't silently break routing.
-- **First-boot autotune**: `autotune` probes GPU model and VRAM, then picks the largest model combination that fits from the hardware tiers (12 / 16 / 24 / 48 GB).
-
-## Quick start
-
-Requirements: NVIDIA GPU (12GB+ VRAM), driver, Docker + NVIDIA Container Toolkit.
-
-```bash
-git clone https://github.com/murphyren225/local_infer.git
-cd local_infer
-./install.sh
-```
-
-The first boot downloads model weights (~21GB for the 24GB tier). Then:
-
-```bash
-curl http://localhost:8080/v1/chat/completions \
-  -H 'Content-Type: application/json' \
-  -d '{"model":"auto","messages":[{"role":"user","content":"Translate to English: 今天天气不错"}]}' -i
-```
-
-Check the `x-tandem-lane: small` response header — this one ran on the small model at near-zero cost.
-
-No Docker available (e.g. a rented GPU container)? Use the bare-process path, validated end-to-end on a real machine:
-
-```bash
-pip install vllm && ./scripts/run_bare.sh
-```
-
-Development needs no GPU at all: the router, cache, and escalation logic are pure Python:
-
-```bash
-PYTHONPATH=gateway python3 -m pytest gateway/tests -q
-python3 evals/run_evals.py --verbose
-```
-
-## Configuration
-
-`config/tandem.example.yaml` is the fully-commented reference. The two knobs you'll touch first:
-
-- `routing.extra_large_keywords` / `extra_small_keywords`: add your domain's "hard task" / "easy task" vocabulary;
-- `lanes.*.revision`: pin model versions to a specific commit hash before production — an upstream weight swap should never silently change your deployment.
-
-## Project status (the honest version)
-
-| Component | Status |
+| Metric | Measured |
 |---|---|
-| Routing / cache / escalation logic | ✅ 21 unit tests + 28-case routing eval, all passing (CI-enforced) |
-| Gateway service (FastAPI, incl. streaming passthrough) | ✅ Complete; works against any OpenAI-compatible backend |
-| 24GB real-machine end-to-end (dual vLLM on one card) | ✅ Validated 2026-09-04 on an RTX 4090D: routing/cache/streaming/stats all pass; memory parameters calibrated from measurement |
-| Docker Compose path | ⚠️ Parameters match the bare-process path, but Compose itself is unvalidated (test machine had no Docker) |
-| Other VRAM tiers (12/16/48GB) | ⚠️ Estimated from measured overhead, not yet validated |
-| Tier-2 routing (small-model difficulty pre-judging) | 📋 Planned, see [docs/roadmap.md](docs/roadmap.md) |
+| Co-resident VRAM | 23.45 / 24.56 GB (1.1GiB safety margin, calibrated via OOM drill) |
+| Small lane (Qwen3-1.7B-FP8) | TTFT 0.15s, 108 tok/s aggregate @4 concurrent |
+| Large lane (Qwen3-32B-AWQ) | TTFT 0.17s, 38 tok/s aggregate @2 concurrent |
+| Failure detection → route switch | ~30–40s (10s watchdog interval × 2 consecutive misses) |
+| Self-heal after a large-model crash | 2–5 min automatic (staged restart; zero downtime with a cloud key) |
 
-## Documentation
+## 3. How to use
 
-Design docs are currently in Chinese:
+Prereqs: NVIDIA GPU (24GB tier validated), Python 3.10+, `pip install vllm nemo-switchyard`,
+Node 22+ (`npm i -g --ignore-scripts @earendil-works/pi-coding-agent`).
 
-- [docs/architecture.md](docs/architecture.md) — full system design: layers, request lifecycle, memory budget, trade-offs
-- [docs/routing.md](docs/routing.md) — the three-tier routing policy and how to tune it
-- [docs/agent-interface.md](docs/agent-interface.md) — agent protocol v1: `x-tandem-hint` step-level routing, `x-tandem-session` per-task ledgers, and the orchestrator blueprint (implemented gateway-side)
-- [docs/roadmap.md](docs/roadmap.md) — roadmap v0.1 → v0.4
+```bash
+git clone https://github.com/murphyren225/local_infer.git && cd local_infer
+# download weights (ModelScope inside China, HF elsewhere) to local dirs, then:
+./homed/run_cluster.sh        # one command up (32B load ≈ 4 min); idempotent; `stop` to halt
+./homed/test.sh all           # per-component tests: small|large|router|console|pi
+./homed/ask.sh auto "any task"
+```
+
+- Console access: AutoDL users click "Custom Service" (port 6006); otherwise
+  `ssh -L 6006:127.0.0.1:6006 <host> -N` and open http://localhost:6006
+- Cloud failover: put `TOGETHER_API_KEY=...` in `.env` for a real cloud tier
+- Model switching: `INFERENCE_PRESET=<name> ./homed/run_cluster.sh` — adding a model
+  family = adding one preset file, see [homed/inference/](homed/inference/)
+- Failover drill: `./homed/test.sh failover` (kills the 32B on purpose, watches the
+  auto-switch and self-heal complete)
+
+## 4. What it can do
+
+Front-desk tasks on the small lane at ~zero cost (translate, summarize, rewrite,
+proofread, classify, extract, rename); expert tasks on the 32B (design analysis, code
+review, contract risk, root-cause analysis, math); file analysis via console upload;
+multi-step agent tasks with real tool execution via pi. The `auto` lane decides who does
+what, and the judge silently escalates when the small model's answer isn't good enough.
+
+## Components
+
+One module per directory, communicating only via HTTP and files — see
+[homed/README.md](homed/README.md): harness ([Pi](https://pi.dev/)), router
+([NeMo Switchyard](https://github.com/NVIDIA-NeMo/Switchyard)), inference (vLLM +
+measured presets), failover (watchdog + staged self-heal, ~120 lines of shell, fully
+ours), console (FastAPI single page).
+
+## Model support
+
+| Model | Status |
+|---|---|
+| Qwen3-32B-AWQ + Qwen3-1.7B-FP8 | ✅ validated on 24GB (current default) |
+| Qwen3.8-27B | ⏳ waiting for a 4-bit quant (bf16 56GB / FP8 28GB both exceed 24GB) |
+| GLM-5.3-Flash | 📋 preset reserved: 320B/18B MoE, smallest quant ~93GB — DGX Spark / 128GB-class devices |
+
+## Status (the honest version)
+
+Single-box full stack and the failover/self-heal loop are validated on a real machine
+(2026-09-06, destructive drill included). Real cloud-API failover is wired but awaits a
+real key. Multi-device (mDNS discovery, Mac MLX nodes, dynamic model pool) is designed
+in [docs/home-cluster.md](docs/home-cluster.md) but not yet built. Phase-1 assets
+(Tandem gateway, agent protocol, routing eval set) live on in docs/ and CI.
 
 ## License
 

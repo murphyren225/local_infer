@@ -1,17 +1,17 @@
 #!/usr/bin/env bash
-# homed phase-1: single-box "home AI computer" stack.
+# homed 编排入口 — 唯一需要用户运行的脚本。
 #
-#   pi (harness) → Switchyard :4000 (router) → vLLM :8001/:8002 → cloud API
+#   pi (harness) → Switchyard :4000 (router) → vLLM :8001/:8002 → 云端兜底
 #
-# Layers are stock parts; this script is the glue: launch lanes with the
-# measured 24GB profile, generate Switchyard's TOML, wire pi's provider.
+# 各组件(homed/*/)通过文件和 HTTP 通信,互不 import;本脚本只负责按顺序拉起:
+#   inference 车道(按 preset) → router 配置 → switchyard → harness 接线
+#   → console (:6006) → failover 看门狗
 #
-#   ./homed/run_cluster.sh          # start everything
-#   ./homed/run_cluster.sh stop     # stop everything
+#   ./homed/run_cluster.sh          # 启动(幂等:健康的组件跳过)
+#   ./homed/run_cluster.sh stop     # 全停
 #
-# Cloud lane: set TOGETHER_API_KEY (+ optionally CLOUD_MODEL) for a real
-# cloud tier; without it a FAKE cloud (pointing at the local large lane)
-# stands in so the routing path is still testable end to end.
+# 换模型: INFERENCE_PRESET=<名字>(见 homed/inference/presets/),默认 qwen3-24gb
+# 云端兜底: 配 TOGETHER_API_KEY 后,降级/兜底自动走真云端
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -20,7 +20,7 @@ SMALL_PORT=8002
 ROUTER_PORT=${ROUTER_PORT:-4000}
 
 if [ "${1:-start}" = "stop" ]; then
-  for name in switchyard vllm-small vllm-large; do
+  for name in watchdog console switchyard vllm-small vllm-large; do
     if [ -f "logs/$name.pid" ]; then
       kill "$(cat logs/$name.pid)" 2>/dev/null && echo "stopped $name" || true
       rm -f "logs/$name.pid"
@@ -29,15 +29,15 @@ if [ "${1:-start}" = "stop" ]; then
   exit 0
 fi
 
-# Model weights: local paths (or HF ids on a box with HF access).
-LARGE_MODEL_PATH=${LARGE_MODEL_PATH:-/root/autodl-tmp/models/Qwen3-32B-AWQ}
-SMALL_MODEL_PATH=${SMALL_MODEL_PATH:-/root/autodl-tmp/models/Qwen3-1.7B-FP8}
-# Public lane names — the only model ids users ever see.
-LARGE_NAME=qwen3-32b-awq
-SMALL_NAME=qwen3-1.7b-fp8
+# ---- 组件: inference —— 按 preset 启动本地车道 ----
+INFERENCE_PRESET=${INFERENCE_PRESET:-qwen3-24gb}
+# shellcheck disable=SC1090
+. "homed/inference/presets/$INFERENCE_PRESET.env"
 export PYTORCH_CUDA_ALLOC_CONF=${PYTORCH_CUDA_ALLOC_CONF:-expandable_segments:True}
 
 mkdir -p logs
+# 车道名落盘,供 router 组件(gen_routes)独立读取 —— 组件间不共享 shell 变量
+printf "LARGE_NAME=%s\nSMALL_NAME=%s\n" "$LARGE_NAME" "$SMALL_NAME" > logs/lanes.env
 
 wait_http() {
   local url=$1 name=$2 tries=${3:-240}
@@ -48,116 +48,62 @@ wait_http() {
   echo "$name failed to become healthy — check logs/"; exit 1
 }
 
-# ---- inference lanes (24GB profile measured on RTX 4090D, 2026-09-04) ----
-# --reasoning-parser keeps <think> out of content: pi renders clean answers
-# and the escalation judge sees clean text to grade.
-echo "==> vllm-large: $LARGE_MODEL_PATH"
-if curl -sf "http://127.0.0.1:$LARGE_PORT/health" >/dev/null 2>&1; then
-  echo "    already healthy, skipping"
-else
-nohup vllm serve "$LARGE_MODEL_PATH" \
-  --served-model-name "$LARGE_NAME" \
-  --gpu-memory-utilization 0.81 --max-model-len 5120 \
-  --kv-cache-dtype fp8 --max-num-seqs 8 --max-num-batched-tokens 1024 \
-  --reasoning-parser qwen3 --default-chat-template-kwargs "{\"enable_thinking\": false}" \
-  --enable-auto-tool-choice --tool-call-parser hermes \
-  --enforce-eager --port $LARGE_PORT \
-  > logs/vllm-large.log 2>&1 &
-echo $! > logs/vllm-large.pid
-wait_http "http://127.0.0.1:$LARGE_PORT/health" vllm-large
-fi
+start_lane() { # start_lane <name> <model_path> <served_name> <port> <args>
+  local name=$1 path=$2 served=$3 port=$4 args=$5
+  echo "==> vllm-$name: $path"
+  if curl -sf "http://127.0.0.1:$port/health" >/dev/null 2>&1; then
+    echo "    already healthy, skipping"; return 0
+  fi
+  # shellcheck disable=SC2086
+  nohup vllm serve "$path" --served-model-name "$served" --port "$port" $args \
+    > "logs/vllm-$name.log" 2>&1 &
+  echo $! > "logs/vllm-$name.pid"
+  wait_http "http://127.0.0.1:$port/health" "vllm-$name"
+}
 
-echo "==> vllm-small: $SMALL_MODEL_PATH"
-if curl -sf "http://127.0.0.1:$SMALL_PORT/health" >/dev/null 2>&1; then
-  echo "    already healthy, skipping"
-else
-nohup vllm serve "$SMALL_MODEL_PATH" \
-  --served-model-name "$SMALL_NAME" \
-  --gpu-memory-utilization 0.11 --max-model-len 8192 \
-  --kv-cache-dtype fp8 --max-num-seqs 8 --max-num-batched-tokens 512 \
-  --reasoning-parser qwen3 --default-chat-template-kwargs "{\"enable_thinking\": false}" \
-  --enable-auto-tool-choice --tool-call-parser hermes \
-  --enforce-eager --port $SMALL_PORT \
-  > logs/vllm-small.log 2>&1 &
-echo $! > logs/vllm-small.pid
-wait_http "http://127.0.0.1:$SMALL_PORT/health" vllm-small
-fi
+# 顺序有讲究:大模型必须先起(装载瞬时峰值需要整卡,见 failover/heal.sh)
+start_lane large "$LARGE_MODEL_PATH" "$LARGE_NAME" $LARGE_PORT "$LARGE_ARGS"
+start_lane small "$SMALL_MODEL_PATH" "$SMALL_NAME" $SMALL_PORT "$SMALL_ARGS"
 
-# a previous switchyard instance is replaced (config may have changed)
+# ---- 组件: router —— 按实时健康生成路由,重启 switchyard ----
 if [ -f logs/switchyard.pid ]; then
   kill "$(cat logs/switchyard.pid)" 2>/dev/null || true
   rm -f logs/switchyard.pid
   sleep 1
 fi
-
-# ---- router: generate Switchyard routing-profile bundle (0.2.x YAML) ----
-if [ -n "${TOGETHER_API_KEY:-}" ]; then
-  CLOUD_BASE_URL=${CLOUD_BASE_URL:-https://api.together.xyz/v1}
-  CLOUD_MODEL=${CLOUD_MODEL:-Qwen/Qwen3-235B-A22B-Instruct-2507-tput}
-  CLOUD_API_KEY=$TOGETHER_API_KEY
-  echo "==> cloud lane: REAL ($CLOUD_MODEL via Together)"
-else
-  CLOUD_BASE_URL="http://127.0.0.1:$LARGE_PORT/v1"
-  CLOUD_MODEL=$LARGE_NAME
-  CLOUD_API_KEY=home
-  echo "==> cloud lane: FAKE (local large stands in; set TOGETHER_API_KEY for real)"
-fi
-
-cat > homed/routes.generated.yaml <<EOF
-# Generated by homed/run_cluster.sh — do not edit; edit the script instead.
-defaults:
-  api_key: home            # local vLLM lanes ignore auth; must be non-empty
-
-routes:
-  # The one model users need to know: answer on small, judge, escalate.
-  auto:
-    type: escalation_router
-    weak:
-      model: $SMALL_NAME
-      base_url: http://127.0.0.1:$SMALL_PORT/v1
-    strong:
-      model: $LARGE_NAME
-      base_url: http://127.0.0.1:$LARGE_PORT/v1
-    judge:
-      model: $SMALL_NAME
-      base_url: http://127.0.0.1:$SMALL_PORT/v1
-      confirmations: 1
-      disable_reasoning: true
-      max_completion_tokens: 512
-    fallback_target_on_evict: strong
-
-  # Explicit lanes for component testing and power users.
-  small:
-    type: model
-    model: $SMALL_NAME
-    base_url: http://127.0.0.1:$SMALL_PORT/v1
-
-  large:
-    type: model
-    model: $LARGE_NAME
-    base_url: http://127.0.0.1:$LARGE_PORT/v1
-
-  cloud:
-    type: model
-    model: $CLOUD_MODEL
-    base_url: $CLOUD_BASE_URL
-    api_key: $CLOUD_API_KEY
-EOF
-
+./homed/router/gen_routes.sh
 echo "==> switchyard on :$ROUTER_PORT"
-nohup switchyard serve --routing-profiles homed/routes.generated.yaml \
+nohup switchyard serve --routing-profiles homed/router/routes.generated.yaml \
   --host 0.0.0.0 --port "$ROUTER_PORT" --inbound both \
   > logs/switchyard.log 2>&1 &
 echo $! > logs/switchyard.pid
 wait_http "http://127.0.0.1:$ROUTER_PORT/v1/models" switchyard 24
 
-# ---- harness: wire pi's provider ----
+# ---- 组件: harness —— pi 的 provider 接线 ----
 mkdir -p ~/.pi/agent
-sed "s/ROUTER_PORT/$ROUTER_PORT/" homed/pi-models.json > ~/.pi/agent/models.json
+sed "s/ROUTER_PORT/$ROUTER_PORT/" homed/harness/pi-models.json > ~/.pi/agent/models.json
 echo "==> pi provider written to ~/.pi/agent/models.json"
+
+# ---- 组件: console —— Web Surface (:6006,AutoDL 自定义服务可直接暴露) ----
+if curl -sf http://127.0.0.1:6006/api/status >/dev/null 2>&1; then
+  echo "==> console already running"
+else
+  nohup python homed/console/console.py > logs/console.log 2>&1 &
+  echo $! > logs/console.pid
+  echo "==> console on :6006"
+fi
+
+# ---- 组件: failover —— 看门狗(云端兜底 + 自愈) ----
+if [ -f logs/watchdog.pid ] && kill -0 "$(cat logs/watchdog.pid)" 2>/dev/null; then
+  echo "==> watchdog already running"
+else
+  setsid nohup ./homed/failover/watchdog.sh > /dev/null 2>&1 < /dev/null &
+  echo $! > logs/watchdog.pid
+  echo "==> watchdog started"
+fi
 
 echo
 echo "==> home cluster is up. The whole API surface:"
 echo "    POST http://127.0.0.1:$ROUTER_PORT/v1/chat/completions"
 echo "    model: auto | small | large | cloud"
-echo "    try:  ./homed/test.sh all"
+echo "    console: http://127.0.0.1:6006    try: ./homed/test.sh all"
