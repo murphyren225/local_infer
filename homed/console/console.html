@@ -1,14 +1,14 @@
 <!doctype html>
-<html lang="zh-CN">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>家庭 AI 控制台</title>
+<title>Home AI Console</title>
 <style>
   :root { --bg:#f5f6f8; --card:#fff; --line:#e3e6ea; --text:#1c2330; --muted:#6b7686;
           --accent:#2563eb; --ok:#16a34a; --bad:#dc2626; --warn:#d97706; }
   * { box-sizing:border-box; }
-  body { margin:0; font:14px/1.6 -apple-system,"PingFang SC","Microsoft YaHei",sans-serif;
+  body { margin:0; font:14px/1.6 -apple-system,"Segoe UI",sans-serif;
          background:var(--bg); color:var(--text); height:100vh; display:flex; flex-direction:column; }
   header { display:flex; align-items:center; gap:12px; padding:10px 18px;
            background:var(--card); border-bottom:1px solid var(--line); }
@@ -35,7 +35,7 @@
   #send:disabled { opacity:.5; cursor:wait; }
   #filechip { font-size:12px; color:var(--accent); padding:2px 18px 6px; display:none; }
   aside { width:320px; border-left:1px solid var(--line); background:var(--card); overflow-y:auto; padding:14px; }
-  aside h2 { font-size:13px; margin:14px 0 6px; color:var(--muted); text-transform:none; }
+  aside h2 { font-size:13px; margin:14px 0 6px; color:var(--muted); }
   aside h2:first-child { margin-top:0; }
   .panel { font-size:13px; background:var(--bg); border-radius:10px; padding:10px 12px; }
   .esc { border-left:3px solid var(--warn); padding:6px 8px; margin-bottom:6px; background:#fffaf2; border-radius:0 8px 8px 0; font-size:12px; }
@@ -48,34 +48,34 @@
 </head>
 <body>
 <header>
-  <h1>🏠 家庭 AI 控制台</h1>
+  <h1>🏠 Home AI Console</h1>
   <span id="mode" class="badge normal">…</span>
-  <span class="lane"><span id="dot-large" class="dot bad"></span>大模型 32B</span>
-  <span class="lane"><span id="dot-small" class="dot bad"></span>小模型 1.7B</span>
+  <span class="lane"><span id="dot-large" class="dot bad"></span>Large 32B</span>
+  <span class="lane"><span id="dot-small" class="dot bad"></span>Small 1.7B</span>
 </header>
 <main>
   <div id="chatcol">
     <div id="msgs"></div>
     <div id="filechip"></div>
     <div id="inputrow">
-      <button id="attach" title="上传文本文件(txt/md/csv/json/代码)">📎</button>
+      <button id="attach" title="Upload a text file (txt/md/csv/json/code)">📎</button>
       <input id="file" type="file" hidden>
-      <textarea id="prompt" placeholder="给家庭算力派个活… (Enter 发送, Shift+Enter 换行)"></textarea>
+      <textarea id="prompt" placeholder="Give your home cluster a task… (Enter to send, Shift+Enter for newline)"></textarea>
       <select id="model">
-        <option value="auto" selected>auto·智能分诊</option>
-        <option value="small">small·1.7B 前台</option>
-        <option value="large">large·32B 专家</option>
-        <option value="cloud">cloud·云端</option>
+        <option value="auto" selected>auto · smart triage</option>
+        <option value="small">small · 1.7B front desk</option>
+        <option value="large">large · 32B expert</option>
+        <option value="cloud">cloud · fallback</option>
       </select>
-      <button id="send">发送</button>
+      <button id="send">Send</button>
     </div>
   </div>
   <aside>
-    <h2>🧭 路由器现在的策略</h2>
-    <div id="routing" class="panel">加载中…</div>
-    <h2>⬆️ 升级事件 (judge 的裁决)</h2>
-    <div id="escalations"><div class="empty">还没有升级事件</div></div>
-    <h2>📊 累计统计</h2>
+    <h2>🧭 Router policy right now</h2>
+    <div id="routing" class="panel">Loading…</div>
+    <h2>⬆️ Escalations (judge verdicts)</h2>
+    <div id="escalations"><div class="empty">No escalations yet</div></div>
+    <h2>📊 Cumulative stats</h2>
     <div id="stats" class="panel"></div>
   </aside>
 </main>
@@ -84,13 +84,13 @@ const $ = id => document.getElementById(id);
 let history = [], pendingFile = null;
 
 const MODE_TEXT = {
-  "normal": ["normal", "正常 · 智能分诊", "auto 车道:每个请求先由 <b>1.7B 小模型</b>回答,judge 审查答案质量,发现活儿超纲就把会话<b>升级到 32B</b>。显式 small/large/cloud 各走各的。"],
-  "degraded-large-cloud": ["degraded", "降级 · 大模型→云端", "本地 32B 挂了。auto 和 large 已切到<b>云端 API</b>,小模型照常。看门狗正在后台拉起 32B,恢复后自动切回。"],
-  "degraded-large-small": ["degraded", "降级 · 大模型→小模型", "本地 32B 挂了,且未配云端 key。auto/large 暂由 <b>1.7B 顶班</b>(能答但质量降级)。看门狗正在后台拉起 32B。"],
-  "degraded-small-cloud": ["degraded", "降级 · 小模型→云端", "小模型挂了,其车道已切云端,32B 照常。后台自愈中。"],
-  "degraded-small-large": ["degraded", "降级 · 小模型→大模型", "小模型挂了,其请求暂由 32B 接管。后台自愈中。"],
-  "degraded-all-cloud": ["degraded", "降级 · 全部→云端", "两个本地模型都挂了,全部流量已切<b>云端 API</b>。后台自愈中。"],
-  "dead": ["dead", "服务不可用", "本地模型全灭且未配云端 key。请在服务器上运行 ./homed/run_cluster.sh"],
+  "normal": ["normal", "Normal · smart triage", "auto lane: every request is answered by the <b>1.7B small model</b> first; a judge reviews the answer and <b>escalates the session to the 32B</b> when the task is out of its depth. Explicit small/large/cloud lanes go direct."],
+  "degraded-large-cloud": ["degraded", "Degraded · large→cloud", "The local 32B is down. auto and large now go to the <b>cloud API</b>; the small model is unaffected. The watchdog is reloading the 32B in the background and will switch back automatically."],
+  "degraded-large-small": ["degraded", "Degraded · large→small", "The local 32B is down and no cloud key is configured. auto/large are temporarily served by the <b>1.7B</b> (reduced quality). The watchdog is reloading the 32B."],
+  "degraded-small-cloud": ["degraded", "Degraded · small→cloud", "The small model is down; its lane is served by the cloud while the 32B runs normally. Self-healing in the background."],
+  "degraded-small-large": ["degraded", "Degraded · small→large", "The small model is down; its requests are handled by the 32B for now. Self-healing in the background."],
+  "degraded-all-cloud": ["degraded", "Degraded · all→cloud", "Both local models are down; all traffic is going to the <b>cloud API</b>. Self-healing in the background."],
+  "dead": ["dead", "Service unavailable", "All local lanes are down and no cloud key is set. Run ./homed/run_cluster.sh on the server."],
 };
 
 function addMsg(role, text) {
@@ -111,16 +111,16 @@ function addMeta(html) {
 async function send() {
   let text = $("prompt").value.trim();
   if (!text && !pendingFile) return;
-  let shown = text || "(分析上传的文件)";
+  let shown = text || "(analyze the uploaded file)";
   addMsg("user", (pendingFile ? `📄 ${pendingFile.name}\n` : "") + shown);
   let content = text;
   if (pendingFile) {
-    content = `以下是文件《${pendingFile.name}》的内容${pendingFile.truncated ? "(已截断)" : ""}:\n---\n${pendingFile.text}\n---\n\n${text || "请总结这个文件的要点。"}`;
+    content = `Here is the content of the file "${pendingFile.name}"${pendingFile.truncated ? " (truncated)" : ""}:\n---\n${pendingFile.text}\n---\n\n${text || "Please summarize the key points of this file."}`;
     pendingFile = null; $("filechip").style.display = "none";
   }
   history.push({ role: "user", content });
   $("prompt").value = ""; $("send").disabled = true;
-  const thinking = addMsg("bot", "…");
+  const thinking = addMsg("bot", "… generating (large models can take 30–60s)");
   try {
     const r = await fetch("/api/chat", {
       method: "POST", headers: { "Content-Type": "application/json" },
@@ -130,14 +130,14 @@ async function send() {
     if (d.error || !d.choices) {
       thinking.textContent = "❌ " + (typeof d.error === "string" ? d.error : JSON.stringify(d.error || d).slice(0, 200));
     } else {
-      const ans = d.choices[0].message.content || "(空回答)";
+      const ans = d.choices[0].message.content || "(empty answer)";
       thinking.textContent = ans;
       history.push({ role: "assistant", content: ans });
       const u = d.usage || {}, ms = (d._console || {}).latency_ms;
-      addMeta(`干活的: <b>${d.model}</b> · 延迟 ${ms ? (ms/1000).toFixed(1) : "?"}s` +
-              (u.completion_tokens ? ` · 生成 ${u.completion_tokens} tok (${ms ? Math.round(u.completion_tokens/(ms/1000)) : "?"} tok/s)` : ""));
+      addMeta(`served by <b>${d.model}</b> · latency ${ms ? (ms/1000).toFixed(1) : "?"}s` +
+              (u.completion_tokens ? ` · ${u.completion_tokens} tok (${ms ? Math.round(u.completion_tokens/(ms/1000)) : "?"} tok/s)` : ""));
     }
-  } catch (e) { thinking.textContent = "❌ 请求失败: " + e; }
+  } catch (e) { thinking.textContent = "❌ Request failed: " + e; }
   $("send").disabled = false; refresh();
 }
 
@@ -153,7 +153,7 @@ $("file").onchange = async () => {
   const d = await r.json();
   if (d.error) { alert(d.error); return; }
   pendingFile = d;
-  $("filechip").textContent = `📄 已附加: ${d.name} (${d.chars} 字${d.truncated ? ",超长已截断" : ""}) — 在下面输入你想对它做什么,或直接发送默认总结`;
+  $("filechip").textContent = `📄 Attached: ${d.name} (${d.chars} chars${d.truncated ? ", truncated" : ""}) — type what to do with it below, or just hit Send for a summary`;
   $("filechip").style.display = "block";
   $("file").value = "";
 };
@@ -161,21 +161,21 @@ $("file").onchange = async () => {
 async function refresh() {
   try {
     const d = await (await fetch("/api/status")).json();
-    const [cls, label, desc] = MODE_TEXT[d.mode] || ["degraded", d.mode, "未知模式"];
+    const [cls, label, desc] = MODE_TEXT[d.mode] || ["degraded", d.mode, "Unknown mode"];
     $("mode").className = "badge " + cls; $("mode").textContent = label;
     $("routing").innerHTML = desc;
     $("dot-large").className = "dot " + (d.lanes.large ? "ok" : "bad");
     $("dot-small").className = "dot " + (d.lanes.small ? "ok" : "bad");
     const s = d.stats || {};
     $("stats").innerHTML =
-      `<div class="statrow"><span>路由器处理请求</span><b>${s.requests ?? "-"}</b></div>` +
-      `<div class="statrow"><span>累计 tokens</span><b>${s.tokens ?? "-"}</b></div>` +
-      `<div class="statrow"><span>上游错误</span><b>${s.errors ?? "-"}</b></div>`;
+      `<div class="statrow"><span>Requests routed</span><b>${s.requests ?? "-"}</b></div>` +
+      `<div class="statrow"><span>Total tokens</span><b>${s.tokens ?? "-"}</b></div>` +
+      `<div class="statrow"><span>Upstream errors</span><b>${s.errors ?? "-"}</b></div>`;
     if (d.escalations && d.escalations.length) {
       $("escalations").innerHTML = d.escalations.slice().reverse().map(e =>
         `<div class="esc"><time>${e.time}</time>${e.detail}</div>`).join("");
     }
-  } catch (e) { /* 状态刷新失败不打扰聊天 */ }
+  } catch (e) { /* status refresh failures shouldn't disturb the chat */ }
 }
 refresh(); setInterval(refresh, 5000);
 </script>

@@ -33,7 +33,7 @@ async def chat(payload: dict):
     try:
         r = await client.post(f"{ROUTER}/chat/completions", json=payload)
     except httpx.HTTPError as exc:
-        return JSONResponse({"error": f"路由器不可达: {exc}"}, status_code=502)
+        return JSONResponse({"error": f"router unreachable: {exc}"}, status_code=502)
     latency_ms = round((time.monotonic() - start) * 1000)
     try:
         data = r.json()
@@ -48,11 +48,11 @@ async def chat(payload: dict):
 async def upload(file: UploadFile = File(...)):
     raw = await file.read()
     if len(raw) > 2_000_000:
-        return JSONResponse({"error": "文件太大(上限 2MB)"}, status_code=400)
+        return JSONResponse({"error": "File too large (2MB limit)"}, status_code=400)
     text = raw.decode("utf-8", errors="replace")
     if text.count("�") > max(20, len(text) * 0.2):
         return JSONResponse(
-            {"error": "暂只支持文本类文件(txt/md/csv/json/代码);PDF/Word 在路线图上"},
+            {"error": "Only text files are supported for now (txt/md/csv/json/code); PDF/Word are on the roadmap"},
             status_code=400,
         )
     return {
