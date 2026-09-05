@@ -1,0 +1,43 @@
+{
+  "providers": {
+    "home": {
+      "baseUrl": "http://127.0.0.1:ROUTER_PORT/v1",
+      "api": "openai-completions",
+      "apiKey": "home",
+      "models": [
+        {
+          "id": "auto",
+          "name": "Home Auto (small→large escalation)",
+          "input": ["text"],
+          "contextWindow": 6144,
+          "maxTokens": 1024,
+          "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 }
+        },
+        {
+          "id": "small",
+          "name": "Home Small (Qwen3-1.7B-FP8)",
+          "input": ["text"],
+          "contextWindow": 8192,
+          "maxTokens": 1024,
+          "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 }
+        },
+        {
+          "id": "large",
+          "name": "Home Large (Qwen3-32B-AWQ)",
+          "input": ["text"],
+          "contextWindow": 6144,
+          "maxTokens": 1024,
+          "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 }
+        },
+        {
+          "id": "cloud",
+          "name": "Cloud fallback",
+          "input": ["text"],
+          "contextWindow": 32768,
+          "maxTokens": 2048,
+          "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 }
+        }
+      ]
+    }
+  }
+}
