@@ -43,6 +43,13 @@
   .statrow { display:flex; justify-content:space-between; padding:2px 0; }
   .statrow b { font-variant-numeric:tabular-nums; }
   .empty { color:var(--muted); font-size:12px; }
+  .dev { background:var(--bg); border-radius:10px; padding:8px 10px; margin-bottom:8px; font-size:12px; }
+  .dev .devname { font-weight:600; font-size:13px; display:flex; align-items:center; gap:6px; }
+  .dev .devhw { color:var(--muted); margin:1px 0 4px; }
+  .devitem { display:flex; justify-content:space-between; padding:1px 0; }
+  .devitem .st { font-weight:600; }
+  .devlast { margin-top:4px; padding-top:4px; border-top:1px dashed var(--line); color:var(--muted); }
+  .devlast b { color:var(--accent); }
   @media (max-width:800px){ aside{display:none;} }
 </style>
 </head>
@@ -71,6 +78,8 @@
     </div>
   </div>
   <aside>
+    <h2>🖥️ Devices — who is on & what runs where</h2>
+    <div id="devices"><div class="empty">Loading…</div></div>
     <h2>🧭 Router policy right now</h2>
     <div id="routing" class="panel">Loading…</div>
     <h2>⬆️ Escalations (judge verdicts)</h2>
@@ -163,6 +172,23 @@ async function refresh() {
     const d = await (await fetch("/api/status")).json();
     const [cls, label, desc] = MODE_TEXT[d.mode] || ["degraded", d.mode, "Unknown mode"];
     $("mode").className = "badge " + cls; $("mode").textContent = label;
+    if (d.devices) {
+      $("devices").innerHTML = d.devices.map(dev => {
+        const dot = `<span class="dot ${dev.ok ? "ok" : "bad"}"></span>`;
+        const items = (dev.items || []).map(it => {
+          const st = it.ok === null ? "" :
+            (it.ok ? '<span class="st" style="color:var(--ok)">on</span>'
+                   : '<span class="st" style="color:var(--bad)">down</span>');
+          return `<div class="devitem"><span>${it.label}</span>${st}</div>`;
+        }).join("");
+        const l = dev.last;
+        const last = l ? `<div class="devlast">last decode: <b>${(l.latency_ms/1000).toFixed(1)}s</b>` +
+          (l.tok_s ? ` · <b>${l.tok_s} tok/s</b>` : "") +
+          ` · ${l.completion_tokens} tok · ${l.at}</div>` : "";
+        return `<div class="dev"><div class="devname">${dot}${dev.name}</div>` +
+               `<div class="devhw">${dev.hw}</div>${items}${last}</div>`;
+      }).join("");
+    }
     $("routing").innerHTML = desc;
     $("dot-large").className = "dot " + (d.lanes.large ? "ok" : "bad");
     $("dot-small").className = "dot " + (d.lanes.small ? "ok" : "bad");

@@ -65,6 +65,11 @@ cmd_init() {
   echo "== homed init: 本机成为 Hub =="
   [ -x "$VENV/bin/switchyard" ] || die "缺 venv/switchyard(见 docs 安装依赖)"
 
+  # 本机硬件档案(控制台设备面板用)
+  printf "%s · %.0fGB RAM · CPU inference" \
+    "$(sysctl -n machdep.cpu.brand_string 2>/dev/null | sed 's/(R)//g;s/(TM)//g' || uname -m)" \
+    "$(($(sysctl -n hw.memsize 2>/dev/null || echo 0) / 1073741824))" > logs/local_hw.info 2>/dev/null || true
+
   # 1) 弱档: 优先本机 llama.cpp(CPU);引擎缺失时先借远端(link-gpu 时一并隧道)
   SMALL_NAME=qwen3-1.7b-fp8   # 远端弱档的名字(默认)
   LLAMA=$(llama_bin) || true
@@ -150,6 +155,12 @@ cmd_link_gpu() {
     done" > logs/tunnel.log 2>&1 < /dev/null &
   echo $! > logs/tunnel.pid
   wait_for "http://127.0.0.1:$LARGE_PORT/health" "强档隧道(远端 32B)" 15
+
+  # 远端硬件档案(控制台设备面板用)
+  # shellcheck disable=SC2086
+  ssh -o BatchMode=yes -o ConnectTimeout=10 $target \
+    'nvidia-smi --query-gpu=name,memory.total --format=csv,noheader' 2>/dev/null \
+    | sed 's/, / · /' > logs/remote_gpu.info || true
 
   restart_router
   ok "集群模式: $(cat logs/cluster_mode 2>/dev/null)"

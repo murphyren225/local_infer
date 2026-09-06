@@ -17,6 +17,28 @@ ROOT = Path(__file__).resolve().parents[2]
 ROUTER = os.environ.get("ROUTER_URL", "http://127.0.0.1:4000/v1")
 PORT = int(os.environ.get("CONSOLE_PORT", "6006"))
 
+# 每个模型最近一次解码指标(仅统计经控制台发出的请求)
+LANE_LAST: dict[str, dict] = {}
+
+
+def _read_file(name: str) -> str:
+    p = ROOT / "logs" / name
+    try:
+        return p.read_text().strip()
+    except OSError:
+        return ""
+
+
+def _lane_names() -> dict:
+    names = {"LARGE_NAME": "large", "SMALL_NAME": "small"}
+    out = {}
+    for line in _read_file("lanes.env").splitlines():
+        if "=" in line:
+            k, v = line.split("=", 1)
+            if k in names:
+                out[names[k]] = v
+    return out
+
 app = FastAPI(title="homed console")
 client = httpx.AsyncClient(timeout=httpx.Timeout(300.0, connect=5.0))
 
@@ -41,6 +63,15 @@ async def chat(payload: dict):
         return JSONResponse({"error": r.text[:300]}, status_code=502)
     if isinstance(data, dict):
         data["_console"] = {"latency_ms": latency_ms}
+        model = data.get("model")
+        tokens = (data.get("usage") or {}).get("completion_tokens") or 0
+        if model and r.status_code == 200:
+            LANE_LAST[model] = {
+                "latency_ms": latency_ms,
+                "completion_tokens": tokens,
+                "tok_s": round(tokens / (latency_ms / 1000), 1) if tokens and latency_ms else None,
+                "at": time.strftime("%H:%M:%S"),
+            }
     return JSONResponse(data, status_code=r.status_code)
 
 
@@ -100,10 +131,54 @@ async def status():
     except (httpx.HTTPError, ValueError):
         pass
 
+    # ---- 设备面板: 谁在线、跑什么、最近解码指标 ----
+    names = _lane_names()
+    small_name = names.get("small", "small")
+    large_name = names.get("large", "large")
+    weak_local = _read_file("weak.src") != "remote"
+    tunnel = _read_file("tunnel.target")
+
+    hub_items = [
+        {"label": "Router · Switchyard :4000", "ok": bool(stats)},
+        {"label": "Console :6006", "ok": True},
+    ]
+    if weak_local:
+        hub_items.append(
+            {"label": f"{small_name} · llama.cpp (CPU)", "ok": lanes["small"]}
+        )
+    gpu_items = [{"label": f"{large_name} · vLLM", "ok": lanes["large"]}]
+    if not weak_local:
+        gpu_items.append({"label": f"{small_name} · vLLM", "ok": lanes["small"]})
+
+    devices = [
+        {
+            "name": "Hub — this Mac",
+            "hw": _read_file("local_hw.info") or "local machine",
+            "ok": True,
+            "items": hub_items,
+            "last": LANE_LAST.get(small_name) if weak_local else None,
+        },
+        {
+            "name": "GPU node — via SSH tunnel",
+            "hw": _read_file("remote_gpu.info") or (tunnel or "not linked"),
+            "ok": lanes["large"],
+            "items": gpu_items,
+            "last": LANE_LAST.get(large_name),
+        },
+        {
+            "name": "Cloud fallback",
+            "hw": "API",
+            "ok": bool(os.environ.get("TOGETHER_API_KEY")) or "TOGETHER_API_KEY" in _read_file("../.env"),
+            "items": [{"label": "standby (activates when local lanes die)", "ok": None}],
+            "last": None,
+        },
+    ]
+
     return {
         "mode": mode,
         "lanes": lanes,
         "stats": stats,
+        "devices": devices,
         "escalations": _parse_escalations(ROOT / "logs" / "switchyard.log")[-8:],
     }
 
