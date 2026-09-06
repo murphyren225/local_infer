@@ -3,3 +3,6 @@
 2026-09-05 23:24:13 watchdog: health change (large_ok=0 small_ok=1) → regenerating routes
 gen_routes: mode=degraded-large-small (large_ok=0 small_ok=1 cloud_key=0)
 2026-09-05 23:24:14 watchdog: switchyard restarted in mode: degraded-large-small
+2026-09-05 23:46:40 watchdog: health change (large_ok=0 small_ok=1) → regenerating routes
+gen_routes: mode=degraded-large-small (large_ok=0 small_ok=1 cloud_key=0)
+2026-09-05 23:46:41 watchdog: switchyard restarted in mode: degraded-large-small

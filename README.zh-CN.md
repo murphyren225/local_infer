@@ -108,6 +108,8 @@ git clone https://github.com/murphyren225/local_infer.git && cd local_infer
 
 ## 文档
 
+- [docs/api.md](docs/api.md) — **API 文档**（全部接口的格式、字段、示例、错误）
+- [docs/tech.md](docs/tech.md) — **技术文档**（每个接口背后的技术与连接方式）
 - [homed/README.md](homed/README.md) — 组件总览（每个组件目录内有各自 README）
 - [docs/home-cluster.md](docs/home-cluster.md) — 集群集群整体设计与二期多机蓝图
 - [docs/architecture.md](docs/architecture.md) / [docs/routing.md](docs/routing.md) /

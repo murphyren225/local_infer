@@ -91,6 +91,11 @@ Single-box full stack and the failover/self-heal loop are validated on a real ma
 real key. Multi-device linking is validated on real machines (2026-09): `homed init` + `homed link-gpu` turn a Mac into the hub (gateway + console + local weak lane via llama.cpp) with a remote 4090 as the strong lane over an SSH tunnel — tunnel loss auto-degrades, relink auto-recovers. Auto-discovery (mDNS/join tokens) is designed but not yet built. Phase-1 assets
 (Tandem gateway, agent protocol, routing eval set) live on in docs/ and CI.
 
+## Documentation
+
+- [docs/api.md](docs/api.md) — **API reference** (every endpoint: formats, fields, examples, errors; Chinese)
+- [docs/tech.md](docs/tech.md) — **Technical reference** (what implements each API and how parts connect; Chinese)
+
 ## License
 
 MIT
