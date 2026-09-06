@@ -1,12 +1,12 @@
-2026-09-05 22:52:07,488 - switchyard.lib.backends.anthropic_cache_breakpoint_backend - INFO - anthropic cache-wrap decision: model=qwen3-32b-awq resolved_format=openai wrapped=False
-2026-09-05 22:52:07,488 - switchyard.lib.backends.anthropic_cache_breakpoint_backend - INFO - anthropic cache-wrap decision: model=qwen3-1.7b-fp8 resolved_format=openai wrapped=False
-2026-09-05 22:52:07,489 - switchyard.lib.backends.deterministic_routing_llm_backend - INFO - DeterministicRoutingLLMBackend: tiers={'strong': 'qwen3-32b-awq', 'weak': 'qwen3-1.7b-fp8'} default=weak
-2026-09-05 22:52:08,579 - switchyard.cli.switchyard_cli - INFO - Switchyard route bundle loaded 6 route(s) from homed/router/routes.generated.yaml
-INFO:     Started server process [71814]
+2026-09-05 23:24:30,870 - switchyard.lib.backends.anthropic_cache_breakpoint_backend - INFO - anthropic cache-wrap decision: model=qwen3-32b-awq resolved_format=openai wrapped=False
+2026-09-05 23:24:30,871 - switchyard.lib.backends.anthropic_cache_breakpoint_backend - INFO - anthropic cache-wrap decision: model=qwen3-1.7b-gguf resolved_format=openai wrapped=False
+2026-09-05 23:24:30,871 - switchyard.lib.backends.deterministic_routing_llm_backend - INFO - DeterministicRoutingLLMBackend: tiers={'strong': 'qwen3-32b-awq', 'weak': 'qwen3-1.7b-gguf'} default=weak
+2026-09-05 23:24:31,380 - switchyard.cli.switchyard_cli - INFO - Switchyard route bundle loaded 6 route(s) from homed/router/routes.generated.yaml
+INFO:     Started server process [12131]
 INFO:     Waiting for application startup.
 INFO:     Application startup complete.
 INFO:     Uvicorn running on http://127.0.0.1:4000 (Press CTRL+C to quit)
-INFO:     127.0.0.1:60517 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61622 - "GET /health HTTP/1.1" 200 OK
 
   ──────────────────────────────────────────────────────────
   switchyard  ready  →  auto
@@ -15,7 +15,7 @@ INFO:     127.0.0.1:60517 - "GET /health HTTP/1.1" 200 OK
                 escalation_router
                 auto  auto
             ○ qwen3-32b-awq
-            ○ qwen3-1.7b-fp8
+            ○ qwen3-1.7b-gguf
             ○ small
             ○ large
               … +1 more
@@ -25,4 +25,8 @@ INFO:     127.0.0.1:60517 - "GET /health HTTP/1.1" 200 OK
   stats     curl -s http://127.0.0.1:4000/v1/stats | python3 -m json.tool
   ──────────────────────────────────────────────────────────
 
-INFO:     127.0.0.1:60518 - "GET /v1/models HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61623 - "GET /v1/models HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61642 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61643 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61649 - "GET /v1/models HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61642 - "GET /v1/routing/stats HTTP/1.1" 200 OK

@@ -88,8 +88,7 @@ ours), console (FastAPI single page).
 
 Single-box full stack and the failover/self-heal loop are validated on a real machine
 (2026-09-06, destructive drill included). Real cloud-API failover is wired but awaits a
-real key. Multi-device (mDNS discovery, Mac MLX nodes, dynamic model pool) is designed
-in [docs/home-cluster.md](docs/home-cluster.md) but not yet built. Phase-1 assets
+real key. Multi-device linking is validated on real machines (2026-09): `homed init` + `homed link-gpu` turn a Mac into the hub (gateway + console + local weak lane via llama.cpp) with a remote 4090 as the strong lane over an SSH tunnel — tunnel loss auto-degrades, relink auto-recovers. Auto-discovery (mDNS/join tokens) is designed but not yet built. Phase-1 assets
 (Tandem gateway, agent protocol, routing eval set) live on in docs/ and CI.
 
 ## License

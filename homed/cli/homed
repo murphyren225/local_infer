@@ -76,8 +76,20 @@ cmd_init() {
     start_bg small logs/small.log "$LLAMA" -m "$MODEL_GGUF" \
       --host 127.0.0.1 --port $SMALL_PORT -c 8192 --jinja --reasoning-budget 0 \
       -a qwen3-1.7b-gguf
-    wait_for "http://127.0.0.1:$SMALL_PORT/health" "弱档(本机 1.7B)" 60
-    SMALL_NAME=qwen3-1.7b-gguf; echo local > logs/weak.src
+    # 弱档失败不致命: 自动落到远借模式,init 继续
+    started=1
+    for _ in $(seq 1 60); do
+      healthy "http://127.0.0.1:$SMALL_PORT/health" && break
+      kill -0 "$(cat logs/small.pid 2>/dev/null)" 2>/dev/null || { started=0; break; }
+      sleep 2
+    done
+    if [ "$started" = 1 ] && healthy "http://127.0.0.1:$SMALL_PORT/health"; then
+      ok "弱档(本机 1.7B) 就绪"
+      SMALL_NAME=qwen3-1.7b-gguf; echo local > logs/weak.src
+    else
+      say "⚠ 本机弱档启动失败(看 logs/small.log)——落到远借模式"
+      rm -f logs/small.pid; echo remote > logs/weak.src
+    fi
   else
     say "⚠ 本机推理引擎未就绪——先借远端弱档(link-gpu 时自动隧道接入)"
     echo remote > logs/weak.src

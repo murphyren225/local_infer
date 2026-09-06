@@ -102,7 +102,8 @@ git clone https://github.com/murphyren225/local_infer.git && cd local_infer
 | 单机全栈（双 vLLM + Switchyard + Pi + 控制台 + 兜底） | ✅ 2026-09-06 真机端到端验证 |
 | 故障切换 + 分段自愈闭环 | ✅ 破坏性演练通过（杀 32B → 40s 切换 → 自动复活） |
 | 云端兜底走真实 API | ⚠️ 逻辑已通（假云端验证），真实 key 待插 |
-| 多设备（mDNS 发现、Mac MLX 节点、动态模型池） | 📋 设计完成（docs/home-cluster.md），未实现 |
+| 多设备联动（Mac Hub + 远端 GPU 经隧道） | ✅ 2026-09 真机验证：homed init/link-gpu 两条命令，Mac 弱档 + 4090 强档分工，断链自动降级、重连自动恢复 |
+| 设备自动发现（mDNS、join token） | 📋 设计完成，未实现 |
 | 历史资产：Tandem 网关与 Agent 协议 | ✅ 见 docs/（路由评测集与显存档位已平移到本栈） |
 
 ## 文档
