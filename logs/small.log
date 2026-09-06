@@ -1,0 +1,18 @@
+0.00.003.306 I cmn  common_param: common_params_print_info: verbosity = 3 (adjust with the `-lv N` CLI arg)
+0.00.003.723 W srv  llama_server: -----------------
+0.00.003.726 W srv  llama_server: CORS is set to allow all origins ('*') and no API key is set
+0.00.003.727 W srv  llama_server: this can be a security risk (cross-origin attacks)
+0.00.003.727 W srv  llama_server: more info: https://github.com/ggml-org/llama.cpp/pull/25655
+0.00.003.727 W srv  llama_server: -----------------
+0.00.005.791 I srv    load_model: loading model '/Users/murphyren/.homed/models/Qwen3-1.7B-Q4_K_M.gguf'
+0.00.005.936 E gguf_init_from_reader: failed to read magic
+0.00.005.989 E llama_model_load: error loading model: llama_model_loader: failed to load model from /Users/murphyren/.homed/models/Qwen3-1.7B-Q4_K_M.gguf
+0.00.006.094 E llama_model_load_from_file_impl: failed to load model
+0.00.006.125 E common_fit_params: encountered an error while trying to fit params to free device memory: failed to load model
+0.00.006.152 E gguf_init_from_reader: failed to read magic
+0.00.006.170 E llama_model_load: error loading model: llama_model_loader: failed to load model from /Users/murphyren/.homed/models/Qwen3-1.7B-Q4_K_M.gguf
+0.00.006.171 E llama_model_load_from_file_impl: failed to load model
+0.00.006.174 E cmn  common_init_: failed to load model '/Users/murphyren/.homed/models/Qwen3-1.7B-Q4_K_M.gguf'
+0.00.006.179 E srv    load_model: failed to load model, '/Users/murphyren/.homed/models/Qwen3-1.7B-Q4_K_M.gguf'
+0.00.006.180 I srv    operator(): operator(): cleaning up before exit...
+0.00.006.410 E srv  llama_server: exiting due to model loading error

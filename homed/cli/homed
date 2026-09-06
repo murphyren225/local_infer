@@ -1,0 +1,174 @@
+#!/usr/bin/env bash
+# homed — 多设备集群 CLI(二期,Mac Hub 模式)。
+#
+#   homed init                     本机成为 Hub: 弱档模型+网关+聊天控制台
+#   homed link-gpu "<ssh目标>"      把远端 GPU 节点的强档车道接进来(SSH 隧道)
+#   homed status                   各组件状态
+#   homed stop                     全停
+#
+# 拓扑(Mac Hub + 远端 4090):
+#   :6006 控制台 ── :4000 Switchyard ──┬── :8002 本机弱档(llama.cpp, CPU)
+#                                     └── :8001 ←SSH隧道← 远端 vLLM 强档
+# 设备间只走网络(隧道模拟局域网),不需要任何互连线。
+set -uo pipefail
+
+# CLI 在 homed/cli/ 下,仓库根在上两级
+ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
+cd "$ROOT"
+HOMED_HOME="$HOME/.homed"
+VENV="$HOMED_HOME/venv"
+MODEL_GGUF="$HOMED_HOME/models/Qwen3-1.7B-Q8_0.gguf"
+SMALL_PORT=8002
+LARGE_PORT=8001
+ROUTER_PORT=4000
+CONSOLE_PORT=6006
+mkdir -p logs
+
+say() { printf '  %s\n' "$*"; }
+ok()  { printf '  \033[32m✓\033[0m %s\n' "$*"; }
+die() { printf '  \033[31m✗\033[0m %s\n' "$*"; exit 1; }
+healthy() { curl -sf --max-time 3 "$1" >/dev/null 2>&1; }
+
+start_bg() { # start_bg <name> <logfile> <cmd...>
+  local name=$1 logf=$2; shift 2
+  nohup "$@" > "$logf" 2>&1 < /dev/null &
+  echo $! > "logs/$name.pid"
+}
+
+wait_for() { # wait_for <url> <name> [tries]
+  local url=$1 name=$2 tries=${3:-30}
+  for _ in $(seq 1 "$tries"); do
+    healthy "$url" && { ok "$name 就绪"; return 0; }
+    sleep 2
+  done
+  die "$name 启动失败,看 logs/"
+}
+
+restart_router() {
+  PATH="$VENV/bin:$PATH" ./homed/router/gen_routes.sh || return 1
+  [ -f logs/switchyard.pid ] && kill "$(cat logs/switchyard.pid)" 2>/dev/null; sleep 1
+  start_bg switchyard logs/switchyard.log "$VENV/bin/switchyard" serve \
+    --routing-profiles homed/router/routes.generated.yaml \
+    --host 127.0.0.1 --port $ROUTER_PORT --inbound both
+  wait_for "http://127.0.0.1:$ROUTER_PORT/v1/models" "网关 Switchyard"
+}
+
+llama_bin() {
+  for c in "$HOMED_HOME/pkg/src/build/bin/llama-server" "$HOMED_HOME/bin/llama-server" llama-server; do
+    command -v "$c" >/dev/null 2>&1 || [ -x "$c" ] || continue
+    "$c" --version >/dev/null 2>&1 && { echo "$c"; return 0; }
+  done
+  return 1
+}
+
+cmd_init() {
+  echo "== homed init: 本机成为 Hub =="
+  [ -x "$VENV/bin/switchyard" ] || die "缺 venv/switchyard(见 docs 安装依赖)"
+
+  # 1) 弱档: 优先本机 llama.cpp(CPU);引擎缺失时先借远端(link-gpu 时一并隧道)
+  SMALL_NAME=qwen3-1.7b-fp8   # 远端弱档的名字(默认)
+  LLAMA=$(llama_bin) || true
+  if healthy "http://127.0.0.1:$SMALL_PORT/health"; then
+    ok "弱档已在运行"
+    [ -f logs/weak.src ] && [ "$(cat logs/weak.src)" = local ] && SMALL_NAME=qwen3-1.7b-gguf
+  elif [ -n "${LLAMA:-}" ] && [ -f "$MODEL_GGUF" ]; then
+    say "启动本机弱档: Qwen3-1.7B GGUF (llama.cpp CPU)"
+    start_bg small logs/small.log "$LLAMA" -m "$MODEL_GGUF" \
+      --host 127.0.0.1 --port $SMALL_PORT -c 8192 --jinja --reasoning-budget 0 \
+      -a qwen3-1.7b-gguf
+    wait_for "http://127.0.0.1:$SMALL_PORT/health" "弱档(本机 1.7B)" 60
+    SMALL_NAME=qwen3-1.7b-gguf; echo local > logs/weak.src
+  else
+    say "⚠ 本机推理引擎未就绪——先借远端弱档(link-gpu 时自动隧道接入)"
+    echo remote > logs/weak.src
+  fi
+
+  # 2) 车道名落盘(router 组件读取)
+  printf "LARGE_NAME=%s\nSMALL_NAME=%s\n" qwen3-32b-awq "$SMALL_NAME" > logs/lanes.env
+
+  # 3) 路由 + 网关(尚无任何车道时跳过,link-gpu 后自动就绪)
+  restart_router || say "⚠ 暂无可用车道,网关待 link-gpu 后启动"
+
+  # 4) 聊天控制台
+  if healthy "http://127.0.0.1:$CONSOLE_PORT/api/status"; then
+    ok "控制台已在运行"
+  else
+    start_bg console logs/console.log "$VENV/bin/python" homed/console/console.py
+    wait_for "http://127.0.0.1:$CONSOLE_PORT/api/status" "控制台"
+  fi
+
+  # 5) 看门狗(Hub 模式只观察切换,不做本地 GPU 自愈)
+  if [ -f logs/watchdog.pid ] && kill -0 "$(cat logs/watchdog.pid)" 2>/dev/null; then
+    ok "看门狗已在运行"
+  else
+    WATCHDOG_HEAL=0 PATH="$VENV/bin:$PATH" \
+      start_bg watchdog /dev/null ./homed/failover/watchdog.sh
+    ok "看门狗启动"
+  fi
+
+  echo
+  echo "== Hub 就绪 =="
+  say "聊天窗口   http://localhost:$CONSOLE_PORT"
+  say "API 入口   http://localhost:$ROUTER_PORT/v1  (model: auto|small|large|cloud)"
+  say "接入 GPU:  homed link-gpu \"-p 43314 root@connect.westb.seetacloud.com\""
+}
+
+cmd_link_gpu() {
+  local target=${1:?用法: homed link-gpu \"-p 端口 user@主机\"}
+  echo "== 接入远端 GPU 强档 =="
+  # 隧道守护循环: 断了 5 秒后自动重连(看门狗会在断连期间自动降级)
+  if [ -f logs/tunnel.pid ] && kill -0 "$(cat logs/tunnel.pid)" 2>/dev/null; then
+    say "已有隧道,先拆除"; kill "$(cat logs/tunnel.pid)" 2>/dev/null; sleep 1
+  fi
+  echo "$target" > logs/tunnel.target
+
+  # 本机弱档缺席时,把远端的弱档(vLLM 1.7B)也一并隧道进来
+  FWD="-L $LARGE_PORT:127.0.0.1:$LARGE_PORT"
+  if ! healthy "http://127.0.0.1:$SMALL_PORT/health"; then
+    FWD="$FWD -L $SMALL_PORT:127.0.0.1:$SMALL_PORT"
+    printf "LARGE_NAME=%s\nSMALL_NAME=%s\n" qwen3-32b-awq qwen3-1.7b-fp8 > logs/lanes.env
+    say "本机弱档缺席 → 远端弱档一并接入"
+  fi
+  # shellcheck disable=SC2086
+  nohup bash -c "while true; do
+      ssh -o BatchMode=yes -o ServerAliveInterval=15 -o ServerAliveCountMax=3 \
+          -o ExitOnForwardFailure=yes -o StrictHostKeyChecking=no \
+          -N $FWD $target
+      sleep 5
+    done" > logs/tunnel.log 2>&1 < /dev/null &
+  echo $! > logs/tunnel.pid
+  wait_for "http://127.0.0.1:$LARGE_PORT/health" "强档隧道(远端 32B)" 15
+
+  restart_router
+  ok "集群模式: $(cat logs/cluster_mode 2>/dev/null)"
+  say "现在聊天窗口里的 auto/large 车道由远端 4090 供算力"
+}
+
+cmd_status() {
+  for svc in "弱档(本机1.7B)|http://127.0.0.1:$SMALL_PORT/health" \
+             "强档(远端32B经隧道)|http://127.0.0.1:$LARGE_PORT/health" \
+             "网关|http://127.0.0.1:$ROUTER_PORT/v1/models" \
+             "控制台|http://127.0.0.1:$CONSOLE_PORT/api/status"; do
+    name=${svc%%|*}; url=${svc#*|}
+    if healthy "$url"; then ok "$name"; else printf '  \033[31m✗\033[0m %s\n' "$name"; fi
+  done
+  say "路由模式: $(cat logs/cluster_mode 2>/dev/null || echo 未知)"
+}
+
+cmd_stop() {
+  for name in watchdog console switchyard tunnel small; do
+    if [ -f "logs/$name.pid" ]; then
+      kill "$(cat logs/$name.pid)" 2>/dev/null && say "stopped $name"
+      rm -f "logs/$name.pid"
+    fi
+  done
+  pkill -f "ssh.*-N -L $LARGE_PORT" 2>/dev/null || true
+}
+
+case "${1:-}" in
+  init)     cmd_init ;;
+  link-gpu) shift; cmd_link_gpu "$@" ;;
+  status)   cmd_status ;;
+  stop)     cmd_stop ;;
+  *) echo "用法: homed {init|link-gpu \"<ssh目标>\"|status|stop}"; exit 1 ;;
+esac

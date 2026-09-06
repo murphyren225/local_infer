@@ -53,8 +53,10 @@ while true; do
     fi
   fi
 
-  # 自愈: 交给 heal.sh(大模型挂掉时需要分段重启,见其头部注释)
-  if [ "$desired" = degraded ] && [ ! -f logs/heal.lock ]; then
+  # 自愈: 交给 heal.sh(大模型挂掉时需要分段重启,见其头部注释)。
+  # Hub 模式(WATCHDOG_HEAL=0)只做降级/恢复切换,不尝试本地拉起——
+  # 远端 GPU 的生死由隧道重连和对端自己负责。
+  if [ "${WATCHDOG_HEAL:-1}" = 1 ] && [ "$desired" = degraded ] && [ ! -f logs/heal.lock ]; then
     touch logs/heal.lock
     log "self-heal: dispatching heal.sh in background"
     setsid nohup bash -c "./homed/failover/heal.sh; rm -f logs/heal.lock" \
