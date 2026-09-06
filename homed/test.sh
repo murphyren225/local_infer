@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Component tests for the home cluster. Each layer testable on its own:
+# Component tests for the cluster. Each layer testable on its own:
 #
 #   ./homed/test.sh small     # inference lane: small model direct (:8002)
 #   ./homed/test.sh large     # inference lane: large model direct (:8001)

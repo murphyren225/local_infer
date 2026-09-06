@@ -1,10 +1,10 @@
-# 家庭 AI 集群 — 一张消费级显卡上的完整本地 AI 栈
+# AI 集群 — 一张消费级显卡上的完整本地 AI 栈
 
 [English](README.md) | **中文**
 
 > 把「Claude Code 级的 agent 体验」装进自己的硬件：Pi 当入口，Switchyard 智能分诊，
 > 大小两个开源模型共享一张卡，模型崩了自动切云端 API 兜底。全部用现成开源件，
-> 我们只造让它们变成一台「家庭 AI 电脑」的胶水层。已在 RTX 4090D 真机端到端验证。
+> 我们只造让它们变成一台「集群 AI 电脑」的胶水层。已在 RTX 4090D 真机端到端验证。
 
 ## 一、界面介绍
 
@@ -109,7 +109,7 @@ git clone https://github.com/murphyren225/local_infer.git && cd local_infer
 ## 文档
 
 - [homed/README.md](homed/README.md) — 组件总览（每个组件目录内有各自 README）
-- [docs/home-cluster.md](docs/home-cluster.md) — 家庭集群整体设计与二期多机蓝图
+- [docs/home-cluster.md](docs/home-cluster.md) — 集群集群整体设计与二期多机蓝图
 - [docs/architecture.md](docs/architecture.md) / [docs/routing.md](docs/routing.md) /
   [docs/agent-interface.md](docs/agent-interface.md) — 一期 Tandem 网关的设计与协议
 - [docs/roadmap.md](docs/roadmap.md) — 路线图

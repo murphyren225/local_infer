@@ -103,7 +103,7 @@ else
 fi
 
 echo
-echo "==> home cluster is up. The whole API surface:"
+echo "==> cluster is up. The whole API surface:"
 echo "    POST http://127.0.0.1:$ROUTER_PORT/v1/chat/completions"
 echo "    model: auto | small | large | cloud"
 echo "    console: http://127.0.0.1:6006    try: ./homed/test.sh all"

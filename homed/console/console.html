@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Home AI Console</title>
+<title>AI Cluster Console</title>
 <style>
   :root { --bg:#f5f6f8; --card:#fff; --line:#e3e6ea; --text:#1c2330; --muted:#6b7686;
           --accent:#2563eb; --ok:#16a34a; --bad:#dc2626; --warn:#d97706; }
@@ -48,7 +48,7 @@
 </head>
 <body>
 <header>
-  <h1>🏠 Home AI Console</h1>
+  <h1>🖥️ AI Cluster Console</h1>
   <span id="mode" class="badge normal">…</span>
   <span class="lane"><span id="dot-large" class="dot bad"></span>Large 32B</span>
   <span class="lane"><span id="dot-small" class="dot bad"></span>Small 1.7B</span>
@@ -60,7 +60,7 @@
     <div id="inputrow">
       <button id="attach" title="Upload a text file (txt/md/csv/json/code)">📎</button>
       <input id="file" type="file" hidden>
-      <textarea id="prompt" placeholder="Give your home cluster a task… (Enter to send, Shift+Enter for newline)"></textarea>
+      <textarea id="prompt" placeholder="Give the cluster a task… (Enter to send, Shift+Enter for newline)"></textarea>
       <select id="model">
         <option value="auto" selected>auto · smart triage</option>
         <option value="small">small · 1.7B front desk</option>

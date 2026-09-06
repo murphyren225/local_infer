@@ -1,11 +1,11 @@
-# Home AI Cluster — a complete local AI stack on one consumer GPU
+# AI Cluster — a complete local AI stack on one consumer GPU
 
 **English** | [中文](README.zh-CN.md)
 
 > A Claude-Code-grade agent experience on your own hardware: Pi as the entrypoint,
 > Switchyard for smart triage, a large + small open model sharing one GPU, and automatic
 > cloud-API failover when a local model dies. Everything is stock open-source parts —
-> we only build the glue that turns them into one "home AI computer".
+> we only build the glue that turns them into one "AI cluster".
 > Validated end-to-end on a real RTX 4090D.
 
 ## 1. Interfaces

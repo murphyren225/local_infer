@@ -2,7 +2,7 @@
 
 上游选型 [Pi](https://pi.dev/)（零改动），本组件只有一份 provider 模板：
 `pi-models.json` → 安装到 `~/.pi/agent/models.json`（run_cluster 自动做），
-把 Pi 指向家庭网关 :4000，声明 auto/small/large/cloud 四个"模型"。
+把 Pi 指向集群网关 :4000，声明 auto/small/large/cloud 四个"模型"。
 
 用法：`pi --provider home --model auto`；交互中 `/model` 切车道。
 
