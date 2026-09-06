@@ -10,11 +10,16 @@
 | 消费独显 24GB (4090/4090D/3090) | ~1TB/s 高带宽 | vLLM (AWQ + FP8 KV;参数见 homed/inference/presets/qwen3-24gb.env) 或 SGLang | ✅ |
 | 消费独显 12–16GB (4070/4080) | 高带宽小容量 | vLLM,模型降档 (config/profiles/) | ⚠️ |
 | 工作站 32–48GB (5090/A6000) | 高带宽大容量 | vLLM/SGLang,可开 CUDA graph;4B 前台在此档可行 | ⚠️ |
-| Apple Silicon Mac | 统一内存,常开低功耗 | MLX-LM (vLLM/SGLang 无 Metal 支持);或 Ollama/LM Studio | 📋 二期 |
-| 大统一内存小主机 (DGX Spark GB10 / 懒猫 AI Pod 64·128GB, 273GB/s) | 容量大带宽低 | vLLM-Jetson / SGLang(官方 Spark 菜谱) / unsloth·llama.cpp;nvfp4 为未来首选;2–4 台 RoCE 组网 | 📋 |
+| Apple Silicon Mac | 统一内存 16–128GB,常开低功耗 | MLX-LM (vLLM/SGLang 无 Metal 支持);或 Ollama/LM Studio | 📋 二期 |
+| **NVIDIA DGX Spark** (GB10) | 128GB 统一内存,官方生态最全 | SGLang(官方 Spark 菜谱,nvfp4) / vLLM;2–4 台 RoCE 组网跑 300B MoE(spark-bench 实测) | 📋 |
+| **Perplexity Portable Computer** | 硬件即 DGX Spark 128GB,预装 Perplexity 本地栈(编排器+Qwen3.8-27B,云端按审批升级) | 整机产品,不可自装;是我们整个方向的**参照产品** | 📋 对标 |
+| **懒猫 AI Pod** (国产) | Jetson T4000/T5000,64/128GB,273GB/s,¥29,899 起,预装 Ubuntu+CUDA | vLLM-Jetson / Ollama / unsloth·llama.cpp(GGUF) | 📋 |
 | 纯 CPU 旧机器 | 无 GPU | 只装 Pi 当终端;或 llama.cpp ≤2B | 📋 |
-| 边缘 (ESP32-S3 / RK3588) | MCU / NPU | ESP32 只做语音客户端接家庭网关;RK3588 用 RKLLM 跑 2–4B int8 | 机器人线 |
 | 云端 API | 无限 | 逃生舱;key 只存网关 (homed/failover) | ✅ |
+
+同为 128GB 级,三台的区别:DGX Spark 是生态标杆(引擎官方直接出菜谱),
+Perplexity 是「买来即用的成品」,AI Pod 是价格更低的国产替代——
+在我们的调度里它们都是「大内存车道」的候选宿主,preset 各配一份即可。
 
 ## 2. 模型 → 宿主硬件
 
@@ -33,21 +38,51 @@
 
 291/305/321B 挤在同一档不是巧合:各家都在瞄准 128–256GB 家用设备的容量甜点位。
 
-## 3. 任务 → 模型 → 硬件
+## 3. 任务分工 —— 按 NeMo Switchyard 官方路由设计
 
-| 任务 | 模型 | 硬件 | 理由 |
-|---|---|---|---|
-| 高频简单活(翻译/总结/分类/提取) | 1.7B–4B 稠密 | 常开设备(Mac/AI Pod/独显小分片) | 量大要快要便宜 |
-| 硬活(分析/评审/数学/根因) | 32B 稠密 | 24GB 独显 | 稠密配高带宽 |
-| Agent 多步(pi) | 32B+工具解析 | 同上,escalation 阶梯 | 工具编排小模型干不动(实测 judge 会升级) |
-| 长文档/大代码库/多模态 | 300B 级 MoE | 128GB 统一内存主机 | MoE 要容量;262K–1M ctx 只有这档给得起 |
-| judge 裁决 | 1.7B | 与前台同宿主 | 快而便宜 |
-| 超纲/本地全灭 | 云端 frontier | API | watchdog 自动切 |
-| 语音机器人 | 不本地跑 | ESP32 → 家庭网关 | 边缘只做耳嘴,脑在网关 |
+不自创分法。以下直接取自 Switchyard 内置的 escalation judge 系统提示词
+(`switchyard/lib/processors/prompts/escalation_judge.md`)——这是 NVIDIA
+对「弱档/强档各管什么」的官方定义,再由我们映射到硬件。
 
-**组合原则**:常开设备当前台+大脑(网关/小模型/judge),高带宽独显当专家
-(开关机=成本开关,watchdog 天然支持),大内存主机当图书馆(长上下文/多模态),
-云端当保险。gen_routes 把这张表编译成 Switchyard 路由。
+### 3.1 双档框架:efficient(弱) 起步,judge 盯梢,确认后单程升级 strong(强)
+
+**efficient 档负责**(官方原文归纳——"being stuck on those is usually temporary"):
+
+- 常规编码、文件探索、单文件修改
+- 常规调试、依赖与环境安装、多数重构
+- 流程性/机械性摩擦:装工具、起服务、照菜谱执行、局部单文件测试修复
+
+**升级到 strong 的三类卡点**(官方判据:卡点超出弱档能力,强模型能破局):
+
+- **跨模块/跨代码库综合**:修复需要从代码库别处学会某个约定、契约或不变量并一致地应用——哪怕改动本身只是单文件
+- **隐蔽不变量**:貌似合理的修复反复挂同一个测试,根因在没人碰过的行为契约上
+- **跨模块根因、多步算法/形式化推理**:弱档一直"差一点点"
+
+**谁都不该升**(官方明确:纯浪费):外部资源缺失——数据/文件不存在、服务永久性坏死、环境与需求矛盾。强模型变不出缺失的资源。
+
+### 3.2 升级触发信号(judge 盯的四类"轨迹病症",官方原文归纳)
+
+| 病症 | 表现 |
+|---|---|
+| 重复与循环 | 同一命令/编辑失败 2+ 次;近似工具调用反复;跟环境较劲(重试已被拒绝的做法) |
+| 假进展 | 证据显示失败却宣布成功;跳过任务指定的验证;写了个空转的测试并基于假信号继续 |
+| 跑偏与死路 | 活动不再服务原始任务;违反显式约束(改了不许碰的文件);没打开报错指向的文件就凭想象改代码;多轮无任何耐久产出 |
+| 绝望动作 | 宣布任务不可能;rm -rf / 全量重装式的破坏性挣扎 |
+
+**正常摩擦不升级**:TDD 先红后绿、报错下一轮就修掉、会话早期的探索死胡同、
+缺工具时自适应换替代品、顺序尝试不同方案(换方案是适应,同方案重试才是循环)。
+
+### 3.3 Switchyard 四种决策机制 → 我们的硬件映射
+
+| 机制 | 适用场景 | 档位落在哪个硬件 |
+|---|---|---|
+| escalation(轨迹 judge,我们在用) | 多轮 agent 会话 | efficient=常开设备小模型(Mac/AI Pod/独显小分片);strong=最强在线节点(24GB 独显 32B;有 128GB 主机时,长上下文任务落 300B MoE);judge=与 efficient 同宿主;fallback_target_on_evict=strong |
+| llm_classifier capability(答前估解题概率) | 单发请求,不想浪费第一答 | 分类器放常开小模型,分流同上 |
+| stage_router(读对话既有信号,零额外调用) | 大流量省 judge 成本 | 同上,信号免费 |
+| subagent_target(子代理定向) | harness 派生的子任务 | 子代理活默认发 efficient 宿主 |
+
+云端 API 不在 Switchyard 的档位设计里,是我们 failover 组件补的第三层:
+本地全灭或明确超纲时的逃生舱。
 
 ## 相关生态(2026-09 快照)
 
@@ -56,4 +91,3 @@
 - spark-bench:4×DGX Spark RoCE 组网跑 GLM-5.3-Flash 的社区实测
 - unsloth:转型 local inference,GGUF 动态量化(1bit 起)单机跑 300B MoE
 - Wafer:推理内核优化平台(任意硬件 1.5–5x),在我们 inference 层之下;Wafer Pass 可作云端供应商
-- 懒猫 AI Pod:Jetson T4000/T5000,64/128GB,¥29,899 起,国产大内存小主机代表
