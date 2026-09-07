@@ -23,7 +23,7 @@
 ## 整体流程图（总图：请求流转 × 池子 × 硬件）
 
 编号 1–7 为请求路径。并发标注：✅ 支持高并发 ｜ ⚠️ 占容量 ｜ ❗ 当前排队串行。
-每个池子的方框内列出「它跑在什么硬件上」：加粗为现役，其余为候选/规划档。
+每个池子的方框内列出「它跑在什么硬件上」：★ 为现役，其余为候选/规划档。
 
 ```mermaid
 flowchart TD
@@ -53,12 +53,12 @@ flowchart TD
     subgraph BOTTOM["③ 资源层 —— 池子 × 硬件"]
         direction LR
         subgraph WPOOL["弱池 · 走量<br/>常开低功耗设备"]
-            WH1["**Mac(现役)**<br/>llama.cpp CPU ❗单槽位"]
+            WH1["Mac ★现役<br/>llama.cpp CPU ❗单槽位"]
             WH2["GPU 小分片<br/>vLLM ✅4路"]
             WH3["AI Pod/小主机<br/>(候选)"]
         end
         subgraph SPOOL["强池 · 破局<br/>高带宽独显"]
-            SH1["**RTX 4090D(现役)**<br/>vLLM 32B ✅1–2路"]
+            SH1["RTX 4090D ★现役<br/>vLLM 32B ✅1–2路"]
             SH2["32–48GB 工作站卡<br/>(候选)"]
         end
         subgraph LPOOL["长文档池(规划)<br/>128GB 大统一内存"]
