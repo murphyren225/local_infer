@@ -112,6 +112,7 @@ bin/homed init                # 一键起栈:探测硬件、选档、起车道�
 - [docs/hardware-model-matrix.md](docs/hardware-model-matrix.md) — 产品页（硬件清单 / 用户配置 / 设备联动 / 任务示例）
 - [docs/agent-interface.md](docs/agent-interface.md) — Agent 协议契约 v1（给未来编排器的接口）
 - [docs/roadmap.md](docs/roadmap.md) — 路线图
+- [docs/repo-layout.md](docs/repo-layout.md) — 仓库结构与设计文档的对应（每个目录为什么存在）
 - [docs/archive/](docs/archive/) — 一期过程文档存档（Tandem 网关设计、旧路由策略、集群一期设计）
 - [homed/README.md](homed/README.md) — 代码组件总览（每个组件目录内有各自 README）
 

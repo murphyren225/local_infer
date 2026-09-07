@@ -14,3 +14,4 @@ __pycache__/
 evals/last_report.md
 homed/router/routes.generated.yaml
 state/
+logs/
