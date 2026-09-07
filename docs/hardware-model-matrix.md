@@ -78,7 +78,7 @@ judge 与弱档同宿主。参考:Switchyard 官方出厂预置也是双档
 
 分配逻辑一句话:**任务先让弱档干,judge 盯干活轨迹,确认卡在弱档能力之外才升
 强档,升级单程不回头;显式指定 small/large/cloud 永远直通;本地全灭走云端**。
-(judge 的官方判据与 8 步流程见 docs/archive/home-cluster.md)
+(判定器的官方判据与决策序列见 docs/design.md 第三部分 §3.3)
 
 | 类型 | 谁干 | 例子(可照抄) |
 |---|---|---|
@@ -92,5 +92,5 @@ judge 与弱档同宿主。参考:Switchyard 官方出厂预置也是双档
 Google Docs 等外部系统(Pi 扩展)。
 
 ---
-*工程细节:显存实测参数 homed/inference/presets/;调度逻辑 docs/archive/home-cluster.md;
+*工程细节:显存实测参数 homed/inference/presets/;调度逻辑 docs/design.md 第三部分 §3;
 组件边界 homed/README.md。*
