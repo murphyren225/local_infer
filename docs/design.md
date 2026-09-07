@@ -38,37 +38,37 @@
 ```mermaid
 flowchart TD
     U(("User")) -- "1" --> ACCESS
-    subgraph ACCESS["接入层"]
+    subgraph ACCESS["接入层 —— 每用户独立进程,异步 I/O,无共享状态"]
         direction LR
         W1["网页控制台 :6006"]
         W2["Pi CLI"]
         W3["API 客户端"]
     end
-    ACCESS -- "2" --> G
-    subgraph G["调度层 Switchyard :4000"]
+    ACCESS -- "2  HTTP(OpenAI 格式)" --> G
+    subgraph G["调度层 Switchyard :4000 —— 无状态异步代理,可多进程"]
         direction LR
         GW["网关"]
         JD["判定器"]
         GW --- JD
     end
-    G -- "3.a 默认" --> WPOOL
-    G -- "3.b 升级" --> SPOOL
-    G -- "3.c 规划" --> LPOOL
-    G -- "3.d 回退" --> CL
-    subgraph BOTTOM["资源层"]
+    G -- "3.a  HTTP" --> WPOOL
+    G -- "3.b  HTTP" --> SPOOL
+    G -- "3.c  HTTP(规划)" --> LPOOL
+    G -- "3.d  HTTPS" --> CL
+    subgraph BOTTOM["资源层 —— 每节点独立引擎进程,并发=连续批处理,上限=KV 池"]
         direction LR
         subgraph WPOOL["弱池<br/>常开低功耗设备"]
-            WH1["Mac · llama.cpp(现役)"]
-            WH2["GPU 显存分片 · vLLM"]
+            WH1["Mac · llama.cpp(现役)<br/>单槽位"]
+            WH2["GPU 显存分片 · vLLM<br/>4 路批处理"]
         end
         subgraph SPOOL["强池<br/>高带宽独显"]
-            SH1["RTX 4090D · vLLM 32B(现役)"]
+            SH1["RTX 4090D · vLLM 32B(现役)<br/>1–2 路批处理"]
             SH2["32–48GB 工作站卡"]
         end
         subgraph LPOOL["长上下文池(规划)<br/>128GB 统一内存"]
             LH1["DGX Spark / AI Pod"]
         end
-        CL["云端 API"]
+        CL["云端 API<br/>供应商侧配额"]
     end
 ```
 
@@ -85,6 +85,22 @@ flowchart TD
 
 网关不探测节点健康、不管理进程、不持久化任何请求内容。它的全部行为由
 路由表文件定义。
+
+### 层间隔离
+
+三层之间只有一种通信方式：HTTP。没有共享内存、共享文件或进程内调用跨越层边界；
+控制平面的文件接口只存在于 Hub 内部，不跨层。由此每层可独立放置、独立扩缩、
+独立失效。
+
+| 边界 | 通信 | 进程关系 | 宿主关系 | 该层的并发模型 |
+|---|---|---|---|---|
+| 用户 → 接入层 | HTTP | 每用户一个客户端进程 | 用户自己的设备或任意主机 | 分布式：N 个用户即 N 个进程 |
+| 接入层 → 调度层 | HTTP（OpenAI/Anthropic 格式） | 独立进程 | 可同机可分机 | 单进程异步 I/O，可 `--workers` 多进程 |
+| 调度层 → 资源层 | HTTP | 独立进程 | 通常分机；同机时按 §6 隔离 | 引擎内连续批处理，上限由 KV 池决定 |
+| 调度层 → 云端 | HTTPS | 外部服务 | 外网 | 供应商配额 |
+
+并发压力只在资源层落地（引擎的等待队列）；接入层与调度层对在途请求的持有成本
+是一对打开的连接加一个挂起的协程，接近零。各层并发上限的实测值见 §4。
 
 ## 3. 硬件与池的映射
 
@@ -754,7 +770,21 @@ weak   = answers_per_minute(108)       # ≈ 32 答/分钟
 
 ## 8. 运维
 
-### 8.1 监控清单
+### 8.1 监控
+
+#### 8.1.1 指标体系
+
+四类数据，每类给出指标、采集点与当前体现位置：
+
+| 类别 | 指标 | 采集点 | 当前体现 | 目标形态 |
+|---|---|---|---|---|
+| 可用性 | 各节点 `/health`；网关 `/v1/models`；`cluster_mode` | 控制平面探测（10s） | 控制台徽章与设备红绿灯；`logs/cluster_mode` | 告警：任一节点连续失败、mode≠normal |
+| 容量与延迟 | 每池在途/等待请求数、KV 池占用、端到端延迟 p50/p95、首 token 延迟、tok/s | vLLM 原生 Prometheus `/metrics`（`num_requests_running/waiting`、`gpu_cache_usage_perc`）；控制台按模型记录最近解码 | 设备卡片「最近解码」（仅控制台流量） | Prometheus 抓取 + Grafana 时间序列；告警：等待队列深度持续>0、p95 超阈值 |
+| 路由与质量 | 弱/强池请求占比、升级次数与理由、判定器调用数与失败率 | `/v1/routing/stats`；`switchyard.log` 中的升级记录 | 升级事件流面板；累计统计面板 | 升级率异常（过高＝弱池能力不足，过低＝判定器 fail-open）告警 |
+| 成本 | 各池 token 数、云端调用次数与费用估算、降级持续时长 | `/v1/routing/stats.cost_estimate`；`watchdog.log` 时间戳 | 累计统计面板 | 云端费用日报；降级超过 N 分钟告警 |
+| 硬件 | GPU 显存/利用率/温度、隧道存活 | `nvidia-smi`/DCGM exporter；隧道循环日志 | `remote_gpu.info`（静态） | Grafana GPU 面板 |
+
+#### 8.1.2 探测清单（当前已实现）
 
 | 探测对象 | 健康值 | 故障签名 | 证据位置 |
 |---|---|---|---|
@@ -764,6 +794,20 @@ weak   = answers_per_minute(108)       # ≈ 32 答/分钟
 | `stats.classifier.total_errors` | 不增长 | 增长＝判定器 fail-open，升级失效 | 同上 |
 | 控制台 `/api/status.mode` | `normal` | `degraded-*` 为降级中 | 页面徽章 |
 | 控制平面心跳 | `cluster_mode` 时间戳新鲜 | 过期＝失去自动降级 | `logs/watchdog.log` |
+
+#### 8.1.3 告警规则（建议）
+
+| 规则 | 条件 | 级别 |
+|---|---|---|
+| 池失效 | 任一池 `/health` 连续 2 次失败 | P1 |
+| 降级持续 | `cluster_mode ≠ normal` 超过 10 分钟 | P2 |
+| 队列积压 | 任一池 `num_requests_waiting > 0` 持续 5 分钟 | P2 |
+| 判定器失效 | `classifier.total_errors` 5 分钟内增长 | P2 |
+| 控制平面失联 | `cluster_mode` 文件超过 30 秒未更新 | P1 |
+| 云端超支 | 日费用估算超预算 | P2 |
+
+现状：可用性与路由类指标已有实时体现（控制台 + 状态文件）；容量、成本、硬件类
+只有采集点没有时间序列存储，Prometheus/Grafana 接入为路线图项。
 
 ### 8.2 故障手册（含真实案例）
 
