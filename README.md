@@ -93,6 +93,7 @@ real key. Multi-device linking is validated on real machines (2026-09): `homed i
 
 ## Documentation
 
+- [docs/design.md](docs/design.md) — **System design** (goal / numbered flow diagrams / per-component walkthrough incl. concurrency; Chinese)
 - [docs/api.md](docs/api.md) — **API reference** (every endpoint: formats, fields, examples, errors; Chinese)
 - [docs/tech.md](docs/tech.md) — **Technical reference** (what implements each API and how parts connect; Chinese)
 

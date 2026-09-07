@@ -108,6 +108,7 @@ git clone https://github.com/murphyren225/local_infer.git && cd local_infer
 
 ## 文档
 
+- [docs/design.md](docs/design.md) — **系统设计文档**（目标 / 整体流程图 / 逐组件走向与并发处理）
 - [docs/api.md](docs/api.md) — **API 文档**（全部接口的格式、字段、示例、错误）
 - [docs/tech.md](docs/tech.md) — **技术文档**（每个接口背后的技术与连接方式）
 - [homed/README.md](homed/README.md) — 组件总览（每个组件目录内有各自 README）
