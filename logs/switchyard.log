@@ -810,3 +810,5 @@ INFO:     127.0.0.1:50323 - "GET /v1/routing/stats HTTP/1.1" 200 OK
 INFO:     127.0.0.1:50387 - "GET /v1/routing/stats HTTP/1.1" 200 OK
 INFO:     127.0.0.1:50440 - "GET /v1/routing/stats HTTP/1.1" 200 OK
 INFO:     127.0.0.1:50515 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50652 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50715 - "GET /v1/routing/stats HTTP/1.1" 200 OK

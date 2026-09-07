@@ -108,8 +108,7 @@ git clone https://github.com/murphyren225/local_infer.git && cd local_infer
 
 ## 文档
 
-- [docs/design.md](docs/design.md) — **设计文档**（系统设计 + 对外接口契约）
-- [docs/tech.md](docs/tech.md) — **技术文档**（按层的实现规范/配置/校准记录/故障手册）
+- [docs/design.md](docs/design.md) — **系统主文档**（三部分：系统设计 / 接口契约 / 技术实现与运维）
 - [docs/hardware-model-matrix.md](docs/hardware-model-matrix.md) — 产品页（硬件清单 / 用户配置 / 设备联动 / 任务示例）
 - [docs/agent-interface.md](docs/agent-interface.md) — Agent 协议契约 v1（给未来编排器的接口）
 - [docs/roadmap.md](docs/roadmap.md) — 路线图
