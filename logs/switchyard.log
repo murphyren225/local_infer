@@ -856,3 +856,384 @@ INFO:     127.0.0.1:53049 - "GET /v1/routing/stats HTTP/1.1" 200 OK
 INFO:     127.0.0.1:53104 - "GET /v1/routing/stats HTTP/1.1" 200 OK
 INFO:     127.0.0.1:53155 - "GET /v1/routing/stats HTTP/1.1" 200 OK
 INFO:     127.0.0.1:53215 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53274 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53324 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53380 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53429 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53485 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53531 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53583 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53631 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53681 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53750 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53801 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53851 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53912 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53964 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54022 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54063 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54105 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54152 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54216 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54273 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54310 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54354 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54411 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54464 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54517 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54564 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54608 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54669 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54719 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54777 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54820 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54864 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54911 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54976 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55032 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55069 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55116 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55166 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55231 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55287 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55328 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55373 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55434 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55485 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55539 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55583 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55627 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55681 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55748 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55800 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55841 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55888 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55935 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55999 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56051 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56093 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56153 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56201 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56250 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56311 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56352 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56397 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56463 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56513 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56567 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56606 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56651 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56700 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56766 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56820 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56868 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56912 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56960 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57009 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57081 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57122 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57178 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57230 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57279 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57333 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57372 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57415 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57463 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57526 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57583 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57624 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57670 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57733 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57778 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57838 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57877 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57947 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57995 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58050 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58115 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58179 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58239 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58296 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58362 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58425 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58493 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58543 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58590 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58645 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58706 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58756 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58822 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58856 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58923 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58969 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59024 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59073 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59125 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59215 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59271 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59327 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59376 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59427 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59501 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59558 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59599 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59655 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59702 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59750 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59806 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59852 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59891 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59957 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59992 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60070 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60108 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60178 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60220 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60274 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60318 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60381 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60425 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60478 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60527 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60570 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60629 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60689 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60723 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60772 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60846 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60894 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60939 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60988 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61037 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61081 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61144 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61177 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61239 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61287 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61330 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61379 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61440 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61473 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61539 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61581 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61643 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61706 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61740 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61794 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61855 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61902 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61949 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62012 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62048 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62127 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62175 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62209 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62259 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62307 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62370 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62411 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62458 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62508 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62555 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62611 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62673 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62708 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62756 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62815 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62875 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62920 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62965 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63030 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63064 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63120 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63171 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63238 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63275 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63329 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63375 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63423 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63486 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63534 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63578 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63643 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63690 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63731 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63787 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63854 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63913 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63952 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64009 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64057 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64105 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64147 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64210 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64258 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64291 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64353 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64395 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64457 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64491 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64552 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64612 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64678 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64762 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64828 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64910 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64976 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65025 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65082 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65119 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65185 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65219 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65318 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65404 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65441 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65498 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49173 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49231 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49269 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49355 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49447 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49535 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49659 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49730 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49853 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49897 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49966 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50134 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50193 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50250 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50298 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50351 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50401 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50470 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50515 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50565 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50607 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50658 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50728 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50775 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50825 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50876 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50917 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50987 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51020 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51083 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51131 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51173 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51233 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51269 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51335 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51383 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51425 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51488 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51536 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51570 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51632 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51674 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51744 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51796 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51856 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51918 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51976 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52022 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [14261]
+2026-09-07 13:27:44,919 - switchyard.cli.switchyard_cli - INFO - Switchyard route bundle loaded 4 route(s) from /Users/murphyren/Desktop/local_infer/state/routes.yaml
+INFO:     Started server process [83397]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://0.0.0.0:4000 (Press CTRL+C to quit)
+INFO:     127.0.0.1:52057 - "GET /health HTTP/1.1" 200 OK
+
+  ──────────────────────────────────────────────────────────
+  switchyard  ready  →  auto
+
+  profiles  ▶ auto  (default)
+                passthrough → qwen3-1.7b-gguf
+            ○ small
+            ○ large
+            ○ cloud
+
+  proxy     http://127.0.0.1:4000
+  models    curl -s http://127.0.0.1:4000/v1/models
+  stats     curl -s http://127.0.0.1:4000/v1/stats | python3 -m json.tool
+  ──────────────────────────────────────────────────────────
+
+INFO:     127.0.0.1:52058 - "GET /v1/models HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52063 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52089 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52110 - "GET /v1/models HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52113 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52147 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [83397]
+2026-09-07 13:29:51,985 - switchyard.cli.switchyard_cli - INFO - Switchyard route bundle loaded 4 route(s) from /Users/murphyren/Desktop/local_infer/state/routes.yaml
+INFO:     Started server process [83672]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://0.0.0.0:4000 (Press CTRL+C to quit)
+INFO:     127.0.0.1:52174 - "GET /health HTTP/1.1" 200 OK
+
+  ──────────────────────────────────────────────────────────
+  switchyard  ready  →  auto
+
+  profiles  ▶ auto  (default)
+                passthrough → qwen3-1.7b-gguf
+            ○ small
+            ○ large
+            ○ cloud
+
+  proxy     http://127.0.0.1:4000
+  models    curl -s http://127.0.0.1:4000/v1/models
+  stats     curl -s http://127.0.0.1:4000/v1/stats | python3 -m json.tool
+  ──────────────────────────────────────────────────────────
+
+INFO:     127.0.0.1:52176 - "GET /v1/models HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52182 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52224 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52252 - "GET /v1/models HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52253 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52255 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52265 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52258 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52291 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52293 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52296 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52307 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52307 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52329 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52348 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52356 - "GET /v1/routing/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52348 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [83672]
+2026-09-07 13:34:39,361 - switchyard.cli.switchyard_cli - INFO - Switchyard route bundle loaded 4 route(s) from /Users/murphyren/Desktop/local_infer/state/routes.yaml
+INFO:     Started server process [84298]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://0.0.0.0:4000 (Press CTRL+C to quit)
+INFO:     127.0.0.1:52393 - "GET /health HTTP/1.1" 200 OK
+
+  ──────────────────────────────────────────────────────────
+  switchyard  ready  →  auto
+
+  profiles  ▶ auto  (default)
+                passthrough → qwen3-1.7b-gguf
+            ○ small
+            ○ large
+            ○ cloud
+
+  proxy     http://127.0.0.1:4000
+  models    curl -s http://127.0.0.1:4000/v1/models
+  stats     curl -s http://127.0.0.1:4000/v1/stats | python3 -m json.tool
+  ──────────────────────────────────────────────────────────
+
+INFO:     127.0.0.1:52394 - "GET /v1/models HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52397 - "POST /v1/chat/completions HTTP/1.1" 200 OK

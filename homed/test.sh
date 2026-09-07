@@ -73,9 +73,13 @@ t_console() {
   UPLOADED=$(curl -s -F "file=@/tmp/report.txt" http://127.0.0.1:6006/api/upload)
   echo "$UPLOADED" | "$PY" -c \
     'import json,sys; d=json.load(sys.stdin); print("  uploaded:", d["name"], d["chars"], "chars")'
-  TEXT=$(echo "$UPLOADED" | "$PY" -c 'import json,sys; print(json.load(sys.stdin)["text"])')
-  curl -s http://127.0.0.1:6006/api/chat -H 'Content-Type: application/json' \
-    -d "$("$PY" -c "import json,sys; print(json.dumps({'model':'small','messages':[{'role':'user','content':'总结这份报表的要点:'+open('/tmp/report.txt').read()}],'max_tokens':256}))")" \
+  "$PY" - << 'PYEOF2' > /tmp/console_chat.json
+import json
+print(json.dumps({"model": "small", "max_tokens": 256,
+                  "messages": [{"role": "user", "content": "总结这份报表的要点:" + open("/tmp/report.txt").read()}]}))
+PYEOF2
+  curl -s --max-time 180 http://127.0.0.1:6006/api/chat -H 'Content-Type: application/json' \
+    -d @/tmp/console_chat.json \
   | "$PY" -c '
 import json,sys
 d=json.load(sys.stdin)
@@ -85,14 +89,14 @@ print("  answer:", " ".join((d["choices"][0]["message"].get("content") or "").sp
 
 t_failover() {
   echo "== 兜底演练: 故意杀掉 32B,看路由是否自动切换 =="
-  kill "$(cat logs/vllm-large.pid 2>/dev/null)" 2>/dev/null || pkill -f "qwen3-32[b]" || true
+  kill "$(cat logs/engine-strong.pid 2>/dev/null)" 2>/dev/null || pkill -f "qwen3-32[b]" || true
   echo "  已杀掉大模型,等看门狗切换(最多 90 秒)..."
   for i in $(seq 1 18); do
-    MODE=$(cat logs/cluster_mode 2>/dev/null)
+    MODE=$(cat state/cluster_mode 2>/dev/null)
     [ "$MODE" != normal ] && [ -n "$MODE" ] && break
     sleep 5
   done
-  echo "  当前模式: $(cat logs/cluster_mode)"
+  echo "  当前模式: $(cat state/cluster_mode)"
   echo "  降级期间派活给 auto(应由幸存车道/云端接住):"
   sleep 5   # 路由器重启需要 1-2 秒,稍等再问
   answered=0
@@ -110,10 +114,10 @@ t_failover() {
   fi
   echo "  等待看门狗自愈(重新加载 32B,最多 8 分钟)..."
   for i in $(seq 1 96); do
-    [ "$(cat logs/cluster_mode 2>/dev/null)" = normal ] && break
+    [ "$(cat state/cluster_mode 2>/dev/null)" = normal ] && break
     sleep 5
   done
-  if [ "$(cat logs/cluster_mode)" = normal ]; then
+  if [ "$(cat state/cluster_mode)" = normal ]; then
     echo "  PASS: 已自动恢复正常模式,大模型复活"
     sleep 5
     for attempt in 1 2 3; do

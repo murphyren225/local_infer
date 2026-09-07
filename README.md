@@ -47,7 +47,7 @@ Node 22+ (`npm i -g --ignore-scripts @earendil-works/pi-coding-agent`).
 ```bash
 git clone https://github.com/murphyren225/local_infer.git && cd local_infer
 # download weights (ModelScope inside China, HF elsewhere) to local dirs, then:
-./homed/run_cluster.sh        # one command up (32B load ≈ 4 min); idempotent; `stop` to halt
+bin/homed init                # one command up: probe hardware, pick preset, start lanes, gateway, console
 ./homed/test.sh all           # per-component tests: small|large|router|console|pi
 ./homed/ask.sh auto "any task"
 ```
@@ -55,7 +55,7 @@ git clone https://github.com/murphyren225/local_infer.git && cd local_infer
 - Console access: AutoDL users click "Custom Service" (port 6006); otherwise
   `ssh -L 6006:127.0.0.1:6006 <host> -N` and open http://localhost:6006
 - Cloud failover: put `TOGETHER_API_KEY=...` in `.env` for a real cloud tier
-- Model switching: `INFERENCE_PRESET=<name> ./homed/run_cluster.sh` — adding a model
+- Model switching: `bin/homed init --preset <name>` — adding a model
   family = adding one preset file, see [homed/inference/](homed/inference/)
 - Failover drill: `./homed/test.sh failover` (kills the 32B on purpose, watches the
   auto-switch and self-heal complete)

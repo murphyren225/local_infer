@@ -42,7 +42,7 @@ $ homed join <Hub内网地址> --token JOIN-XXXX
 出厂预装节点镜像后,`join` 这步也能省掉:插电插网,Hub 网页点批准。
 
 状态:单机版全流程(探测→选档→起栈→自愈)已于 2026-09 在 RTX 4090D 真机验证
-(homed/run_cluster.sh);`init/join` CLI 封装与多机注册为二期,join 机制 1-2 天量级。
+(`bin/homed init`);`link-gpu` 已验证,`join` 已实现待局域网双机验证。
 
 ## 3. 硬件清单(按预算叠加)
 

@@ -119,7 +119,8 @@ flowchart TD
 需要在池前加负载均衡层）；在途请求迁移到新设备（引擎不支持 KV 跨机迁移）；
 自动发现和网页批准（现在用口令）。
 
-实现状态：`init` 和远端 GPU 接入（`link-gpu`）已验证；通用 `join` 未做。
+实现状态：`init`、`link-gpu`、看门狗自愈已在真机验证；`join`（节点自探测、
+自定池、向 Hub 注册接口登记）已实现，尚未在局域网双机环境验证。
 
 ## 5. 并发与产能
 
@@ -477,7 +478,7 @@ r = client.messages.create(model="auto", max_tokens=1024,
 单 Python 进程，无状态，由控制平面启动与重启：
 
 ```
-switchyard serve --routing-profiles homed/router/routes.generated.yaml \
+switchyard serve --routing-profiles state/routes.yaml \
                  --host 0.0.0.0 --port 4000 --inbound both
 ```
 
@@ -489,9 +490,9 @@ switchyard serve --routing-profiles homed/router/routes.generated.yaml \
 
 网关不探测健康、不管理进程；配置非法时启动即退，错误定位单行输出到日志。
 
-### 3.2 路由表规范（`routes.generated.yaml`）
+### 3.2 路由表规范（`state/routes.yaml`）
 
-由 `homed/router/gen_routes.sh` 按当前健康节点集合生成，手改会在下次生成时
+由 `homed/router/routes.py` 按注册表与当前健康生成，手改会在下次生成时
 被覆盖。顶层仅 `defaults` 与 `routes` 两键。
 
 ```yaml
@@ -724,13 +725,15 @@ RoCE 配置出厂预置，对集群表现为一个节点、一个 URL；组网�
 
 | 文件 | 写者 | 读者 | 内容 |
 |---|---|---|---|
-| `homed/router/routes.generated.yaml` | gen_routes | 网关 | 路由表 |
-| `logs/cluster_mode` | gen_routes | 控制台、脚本、人 | 状态枚举（§6.2） |
-| `logs/lanes.env` | CLI/编排脚本 | gen_routes、控制台 | 池内模型名 |
+| `state/routes.yaml` | router/routes.py | 网关 | 路由表 |
+| `state/cluster_mode` | router/routes.py | 控制台、脚本、人 | 状态枚举（§6.2） |
+| `state/nodes.json` | CLI（init/link-gpu）、注册接口（join） | routes 生成器、控制台 | 节点注册表：名称/池/模型/地址/硬件 |
+| `state/preset` | CLI | heal | 本机 preset 名 |
+| `state/join_token` | init | 注册接口 | 加入口令 |
 | `homed/inference/presets/*.env` | 人（校准后固化） | 编排脚本 | 节点档位参数 |
 | `logs/*.info` | CLI 探测 | 控制台 | 设备硬件档案 |
 | `logs/*.pid` | 各启动器 | stop/status/看门狗 | 进程句柄 |
-| `.env` | 管理员 | gen_routes | 云端凭据 |
+| `.env` | 管理员 | router/routes.py | 云端凭据 |
 
 ### 6.2 健康与降级状态机
 
@@ -743,22 +746,23 @@ stateDiagram-v2
     dead --> normal : 节点拉起后重新生成
 ```
 
-状态取值即 `logs/cluster_mode` 枚举（§3.2 表）。探测周期 10 秒，判死
+状态取值即 `state/cluster_mode` 枚举（§3.2 表）。探测周期 10 秒，判死
 条件为连续 2 次失败；控制平面自身失效的判据是该文件时间戳超过 2×周期
 不更新，此时数据面照常但失去自动降级能力。
 
-### 6.3 CLI 规范
+### 6.3 CLI 规范（`bin/homed`，即 `python3 -m homed`）
 
 | 命令 | 语义 | 前置条件 | 产物 | 失败行为 |
 |---|---|---|---|---|
-| `homed init` | 本机成为 Hub：起弱池引擎、生成路由表、起网关/控制台/看门狗 | venv 内有 switchyard | `lanes.env`、`local_hw.info`、各 pid | 弱池启动失败不中断，落到远借模式继续 |
-| `homed link-gpu "<ssh 目标>"` | SSH 隧道接入远端 GPU 节点并重生成路由 | 免密 key 已配 | 隧道守护循环、`remote_gpu.info` | 隧道不通则退出，已起组件不受影响 |
-| `homed status` | 各组件健康与当前模式 | — | — | — |
-| `homed stop` | 按 pid 全停 | — | 清除 pid 文件 | — |
+| `init [--preset P]` | 本机成为 Hub：探测硬件选 preset、起本地车道、登记注册表、发口令、生成路由表、起网关/控制台/看门狗 | 服务 venv 内有 switchyard | `state/nodes.json`、`state/preset`、`state/join_token`、各 pid | 单条车道失败不中断；无任何车道时网关延后至 join/link-gpu |
+| `join HUB_URL --token T [--preset P]` | 本机加入已有 Hub：起本地车道后向 Hub 的 `/api/register` 登记 | Hub 可达 | Hub 侧注册表新增条目，看门狗下一拍重生成路由 | 口令错 403；登记失败退出 1 |
+| `link-gpu "SSH_TARGET" [--port] [--model]` | Hub 经 SSH 隧道接入远端 GPU 节点并登记 | 免密 key | 隧道守护循环、注册表条目 | 隧道不通则拆隧道退出 1 |
+| `status` | 注册表各节点健康、网关/控制台/看门狗存活、当前模式 | — | — | — |
+| `stop` | 按 pid 全停（看门狗、控制台、网关、隧道、本地车道） | — | 清 pid | — |
+| `regen` | 强制按当前健康重生成路由表并重启网关 | — | — | — |
 
-单 GPU 机整机部署用 `homed/run_cluster.sh`（幂等；`stop` 全停）。
-测试入口 `homed/test.sh [small|large|router|console|pi|failover|all]`，
-`failover` 为破坏性演练不含在 `all` 内。
+单 GPU 机整机部署即 `init`（自动选 `qwen3-24gb` preset，先起强池再起弱池）。
+HTTP 冒烟 `homed/test.sh [small|large|router|console|pi|failover|all]`。
 
 ## 7. 并发与容量
 
@@ -797,7 +801,7 @@ weak   = answers_per_minute(108)       # ≈ 32 答/分钟
 
 | 类别 | 指标 | 采集点 | 当前体现 | 目标形态 |
 |---|---|---|---|---|
-| 可用性 | 各节点 `/health`；网关 `/v1/models`；`cluster_mode` | 控制平面探测（10s） | 控制台徽章与设备红绿灯；`logs/cluster_mode` | 告警：任一节点连续失败、mode≠normal |
+| 可用性 | 各节点 `/health`；网关 `/v1/models`；`cluster_mode` | 控制平面探测（10s） | 控制台徽章与设备红绿灯；`state/cluster_mode` | 告警：任一节点连续失败、mode≠normal |
 | 容量与延迟 | 每池在途/等待请求数、KV 池占用、端到端延迟 p50/p95、首 token 延迟、tok/s | vLLM 原生 Prometheus `/metrics`（`num_requests_running/waiting`、`gpu_cache_usage_perc`）；控制台按模型记录最近解码 | 设备卡片「最近解码」（仅控制台流量） | Prometheus 抓取 + Grafana 时间序列；告警：等待队列深度持续>0、p95 超阈值 |
 | 路由与质量 | 弱/强池请求占比、升级次数与理由、判定器调用数与失败率 | `/v1/routing/stats`；`switchyard.log` 中的升级记录 | 升级事件流面板；累计统计面板 | 升级率异常（过高＝弱池能力不足，过低＝判定器 fail-open）告警 |
 | 成本 | 各池 token 数、云端调用次数与费用估算、降级持续时长 | `/v1/routing/stats.cost_estimate`；`watchdog.log` 时间戳 | 累计统计面板 | 云端费用日报；降级超过 N 分钟告警 |

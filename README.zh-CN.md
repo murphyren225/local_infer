@@ -53,7 +53,7 @@ git clone https://github.com/murphyren225/local_infer.git && cd local_infer
 # 模型权重下载到本地(国内走 ModelScope):
 #   modelscope download --model Qwen/Qwen3-32B-AWQ  --local_dir /root/autodl-tmp/models/Qwen3-32B-AWQ
 #   modelscope download --model Qwen/Qwen3-1.7B-FP8 --local_dir /root/autodl-tmp/models/Qwen3-1.7B-FP8
-./homed/run_cluster.sh        # 一键起栈(大模型加载约 4 分钟),幂等,stop 全停
+bin/homed init                # 一键起栈:探测硬件、选档、起车道、起网关与控制台(32B 加载约 4 分钟)
 ./homed/test.sh all           # 分层全测: small|large|router|console|pi 也可单测
 ./homed/ask.sh auto "随便派个活"
 ```
@@ -61,7 +61,7 @@ git clone https://github.com/murphyren225/local_infer.git && cd local_infer
 - 控制台：AutoDL 用户在实例页点「自定义服务」即得公网链接（就是 6006 端口）；
   其他环境 `ssh -L 6006:127.0.0.1:6006 <主机> -N` 后开 http://localhost:6006
 - 云端兜底：`.env` 里写 `TOGETHER_API_KEY=...` 即启用真云端（不配则降级到幸存车道）
-- 换模型：`INFERENCE_PRESET=<preset名> ./homed/run_cluster.sh`，
+- 换模型：`bin/homed init --preset <preset名>`，
   见 [homed/inference/](homed/inference/)（新模型接入 = 加一个 preset 文件）
 - 兜底演练：`./homed/test.sh failover`（故意杀掉 32B，看自动切换和自愈全程）
 
