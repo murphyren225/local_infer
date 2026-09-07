@@ -26,50 +26,61 @@
 每个池子的方框内列出「它跑在什么硬件上」：加粗为现役，其余为候选/规划档。
 
 ```mermaid
-flowchart TB
-    U((User)) -- 1 --> ACCESS
-    subgraph ACCESS["接入层 ✅ 异步转发"]
+flowchart TD
+    U((("User"))) -- "1 网页聊天 / Pi 终端 / 程序调用" --> ACCESS
+
+    subgraph ACCESS["① 接入层 Harness ✅ 异步转发"]
+        direction LR
         W1["网页控制台 :6006"]
-        W2["Pi CLI(终端 agent)"]
-        W3["API 客户端(现有软件)"]
-    end
-    ACCESS -- "2 OpenAI 格式" --> G["网关 :4000 Switchyard<br/>✅ 无状态异步代理"]
-    G -- "3 裁决" --> J["判定器(复用弱池模型)<br/>⚠️ 占弱池容量 +10~20%"]
-    G -- "4.a 默认(~80%流量)" --> WPOOL
-    G -- "4.b 判定超纲,单向升级" --> SPOOL
-    G -- "4.d 长文档/多模态(规划)" --> LPOOL
-    G -- "4.c 兜底" --> CL["云端 API ✅<br/>Together / Claude / GPT 大杯"]
-
-    subgraph WPOOL["弱池 · 走量 —— 跑在常开低功耗设备"]
-        WH1["**Mac(现役)** llama.cpp CPU ❗单槽位"]
-        WH2["GPU 显存小分片(单机形态) vLLM ✅4路"]
-        WH3["懒猫 AI Pod / 小主机(候选)"]
-    end
-    subgraph SPOOL["强池 · 破局 —— 跑在高带宽独显"]
-        SH1["**RTX 4090D 24GB(现役)** vLLM 32B ✅1–2路,超载排队"]
-        SH2["32–48GB 工作站卡(候选)"]
-        SH3["同型节点加入同池 = 负载均衡扩容"]
-    end
-    subgraph LPOOL["长文档池(规划) —— 跑在 128GB 级大统一内存设备"]
-        LH1["NVIDIA DGX Spark(单台或 2–4 台组网) 300B MoE"]
-        LH2["懒猫 AI Pod 128GB(国产替代)"]
-        LH3["Perplexity Portable Computer(同类成品,对标参照)"]
+        W2["Pi CLI"]
+        W3["API 客户端"]
     end
 
-    WPOOL -- 5 --> G
-    SPOOL -- 5 --> G
-    CL -- 5 --> G
-    G -- "6/7 响应,model 标注实际执行者" --> ACCESS
+    ACCESS -- "2 包装为 OpenAI 格式 (model:auto + messages)" --> G
+
+    subgraph G["② 调度层 Switchyard :4000"]
+        direction LR
+        GW["网关 ✅ 无状态异步代理"]
+        JD["判定器 ⚠️ 复用弱池模型<br/>读对话轨迹,确认超纲才升级"]
+        GW --- JD
+    end
+
+    G -- "3.a 默认 ~80% 流量" --> WPOOL
+    G -- "3.b 判定超纲,单向升级" --> SPOOL
+    G -- "3.c 长文档/多模态(规划)" --> LPOOL
+    G -- "3.d 兜底" --> CL
+
+    subgraph BOTTOM["③ 资源层 —— 池子 × 硬件"]
+        direction LR
+        subgraph WPOOL["弱池 · 走量<br/>常开低功耗设备"]
+            WH1["**Mac(现役)**<br/>llama.cpp CPU ❗单槽位"]
+            WH2["GPU 小分片<br/>vLLM ✅4路"]
+            WH3["AI Pod/小主机<br/>(候选)"]
+        end
+        subgraph SPOOL["强池 · 破局<br/>高带宽独显"]
+            SH1["**RTX 4090D(现役)**<br/>vLLM 32B ✅1–2路"]
+            SH2["32–48GB 工作站卡<br/>(候选)"]
+        end
+        subgraph LPOOL["长文档池(规划)<br/>128GB 大统一内存"]
+            LH1["DGX Spark<br/>单台或2–4台组网"]
+            LH2["AI Pod 128GB /<br/>Perplexity 同类成品"]
+        end
+        CL["云端 API ✅<br/>Together/Claude/GPT"]
+    end
 ```
+
+**4** 响应原路返回（池子 → 网关 → 接入层 → 用户），`model` 字段如实标注实际执行者，
+回程不再画线以保持图的层级清晰。
+
 
 **编号说明**：
 
 - **1** 用户动作，三入口任选：网页聊天框 / **Pi**（终端 agent）/ 程序直调 API
-- **2** 接入层包装成 OpenAI 格式（`model:"auto"` + `messages`）
-- **3** 网关查会话粘性表；未升级的会话交判定器读对话轨迹打分
-- **4.a** 默认走弱池 ｜ **4.b** 确认超纲走强池（会话单向固定）｜
-  **4.c** 本地失效时走云端 ｜ **4.d** 长文档/看图任务走大内存池（规划档）
-- **5→7** 响应原路返回，`model` 字段如实标注实际执行者
+- **2** 接入层包装成 OpenAI 格式（`model:"auto"` + `messages`），发给调度层
+- **3** 调度层内先查会话粘性表、判定器打分，然后四选一下发：
+  **3.a** 默认弱池 ｜ **3.b** 确认超纲进强池（会话单向固定）｜
+  **3.c** 长文档/看图进大内存池（规划档）｜ **3.d** 本地失效走云端
+- **4** 响应原路返回
 
 **硬件 → 池子的分工原则**（一句话）：常开低功耗设备当弱池（高频便宜活 24h 在线），
 高带宽独显当强池（稠密大模型吃带宽），128GB 级大统一内存设备当长文档池
