@@ -1,7 +1,7 @@
 # 仓库结构与设计文档的对应
 
 规则只有三条：**目录名等于设计文档里的层**；**可变状态只放 `state/`，进程产物只放
-`logs/`，两者不入库**；**一期资产留在自己的目录里，不与现役代码混放**。
+`logs/`，两者不入库**；**仓库里只有当前设计需要的部件**。
 
 ## 现役代码：`homed/`（对应 design.md 第一部分的四层）
 
@@ -33,22 +33,9 @@
 |---|---|
 | `docs/design.md` | 主文档：设计 / 接口契约 / 实现与运维 |
 | `docs/hardware-model-matrix.md` | 产品页：硬件清单、配置、联动、任务 |
-| `docs/agent-interface.md` | Agent 协议 v1，给未来编排器的接口合同 |
 | `docs/roadmap.md` | 路线图 |
 | `docs/repo-layout.md` | 本文 |
-| `docs/archive/` | 一期过程文档 |
-
-## 一期资产（Tandem 网关时代，仍在库中）
-
-| 路径 | 内容 | 现状 |
-|---|---|---|
-| `gateway/` | 自研的 Tandem 路由网关（Python，含缓存、升级、协议 v1 扩展头）与其单元测试 | 已被 Switchyard 取代；`docs/agent-interface.md` 的实现仍在这里 |
-| `evals/` | 路由评测集与门禁脚本 | CI 仍在跑；评测集的价值独立于路由器实现 |
-| `autotune/`、`config/profiles/` | 一期的显存档位探测与档位表 | 校准数据已平移到 `homed/inference/presets/`；档位表待整合 |
-| `scripts/`、`docker-compose.yml`、`install.sh` | 一期的 Docker 与裸进程启动 | 未随二期更新，视为历史 |
-
-处置原则：不删（CI 和协议文档还引用），但不再演进；确认无引用后整体移入 `archive/`。
 
 ## CI：`.github/workflows/ci.yml`
 
-跑 `tests/`（现役控制平面）、`gateway/tests`（一期）与 `evals/`（路由评测门禁）。
+跑 `tests/`（控制平面与路由生成的单元测试）。

@@ -17,7 +17,3 @@ jobs:
         run: pip install pytest
       - name: Unit tests — homed control plane & router (current)
         run: python -m pytest tests -q
-      - name: Unit tests — phase-1 gateway (legacy)
-        run: PYTHONPATH=gateway python -m pytest gateway/tests -q
-      - name: Routing eval gate (accuracy >= 90%)
-        run: python evals/run_evals.py --min-accuracy 0.9

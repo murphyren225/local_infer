@@ -77,15 +77,14 @@ bin/homed init                # 一键起栈:探测硬件、选档、起车道�
 
 ## 组件架构
 
-每个模块一个组件，互相只通过 HTTP 和文件通信（详见 [homed/README.md](homed/README.md)）：
+代码按设计文档的层分包，层间只通过 HTTP 和文件通信（详见 [docs/repo-layout.md](docs/repo-layout.md)）：
 
-| 组件 | 用的现成件 | 我们写的胶水 |
-|---|---|---|
-| harness | [Pi](https://pi.dev/) | 一份 provider 配置 |
-| router | [NeMo Switchyard](https://github.com/NVIDIA-NeMo/Switchyard) | 健康感知的配置生成器 |
-| inference | vLLM | 实测显存 preset（每模型家族一个） |
-| failover | — | 看门狗 + 分段自愈（全自研，~120 行 shell） |
-| console | FastAPI | 聊天/上传/路由可视化单页 |
+| 包 | 层 | 用的现成件 | 我们写的部分 |
+|---|---|---|---|
+| `homed/access/` | 接入层 | [Pi](https://pi.dev/) | Pi 配置生成；网页控制台与节点登记接口 |
+| `homed/router/` | 调度层 | [NeMo Switchyard](https://github.com/NVIDIA-NeMo/Switchyard) | 路由表生成；网关进程管理 |
+| `homed/node/` | 资源层 | vLLM / llama.cpp | 硬件探测与定池；preset 解析；引擎进程 |
+| `homed/control/` | 控制平面 | — | 节点注册表、健康、看门狗、分段自愈 |
 
 ## 模型支持
 
@@ -95,25 +94,23 @@ bin/homed init                # 一键起栈:探测硬件、选档、起车道�
 | Qwen3.8-27B | ⏳ 等 4-bit 量化（现有 bf16 56GB / FP8 28GB 均超 24GB） |
 | GLM-5.3-Flash | 📋 preset 已预留：320B/18B MoE，最小量化 ~93GB，需 DGX Spark/128GB 级设备 |
 
-## 项目状态（诚实版）
+## 项目状态
 
 | 部分 | 状态 |
 |---|---|
-| 单机全栈（双 vLLM + Switchyard + Pi + 控制台 + 兜底） | ✅ 2026-09-06 真机端到端验证 |
-| 故障切换 + 分段自愈闭环 | ✅ 破坏性演练通过（杀 32B → 40s 切换 → 自动复活） |
-| 云端兜底走真实 API | ⚠️ 逻辑已通（假云端验证），真实 key 待插 |
-| 多设备联动（Mac Hub + 远端 GPU 经隧道） | ✅ 2026-09 真机验证：homed init/link-gpu 两条命令，Mac 弱档 + 4090 强档分工，断链自动降级、重连自动恢复 |
-| 设备自动发现（mDNS、join token） | 📋 设计完成，未实现 |
-| 历史资产：Tandem 网关与 Agent 协议 | ✅ 见 docs/（路由评测集与显存档位已平移到本栈） |
+| 单机全栈（vLLM 双池 + Switchyard + Pi + 控制台 + 兜底） | 2026-09 真机验证 |
+| 故障切换 + 分段自愈 | 破坏性演练通过（杀 32B → 40s 切换 → 自动复活） |
+| Mac Hub + 远端 GPU 联动 | 真机验证；断链自动降级、重连恢复 |
+| 注册表驱动的热插拔 | `init` / `link-gpu` 已验证；`join` 已实现待双机验证 |
+| 云端兜底走真实 API | 逻辑已通，真实 key 待插 |
+| 池内多副本负载均衡、自动发现、过载保护 | 路线图 |
 
 ## 文档
 
 - [docs/design.md](docs/design.md) — **系统主文档**（三部分：系统设计 / 接口契约 / 技术实现与运维）
 - [docs/hardware-model-matrix.md](docs/hardware-model-matrix.md) — 产品页（硬件清单 / 用户配置 / 设备联动 / 任务示例）
-- [docs/agent-interface.md](docs/agent-interface.md) — Agent 协议契约 v1（给未来编排器的接口）
 - [docs/roadmap.md](docs/roadmap.md) — 路线图
 - [docs/repo-layout.md](docs/repo-layout.md) — 仓库结构与设计文档的对应（每个目录为什么存在）
-- [docs/archive/](docs/archive/) — 一期过程文档存档（Tandem 网关设计、旧路由策略、集群一期设计）
 - [homed/README.md](homed/README.md) — 代码组件总览（每个组件目录内有各自 README）
 
 ## License

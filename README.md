@@ -70,11 +70,11 @@ what, and the judge silently escalates when the small model's answer isn't good 
 
 ## Components
 
-One module per directory, communicating only via HTTP and files — see
-[homed/README.md](homed/README.md): harness ([Pi](https://pi.dev/)), router
-([NeMo Switchyard](https://github.com/NVIDIA-NeMo/Switchyard)), inference (vLLM +
-measured presets), failover (watchdog + staged self-heal, ~120 lines of shell, fully
-ours), console (FastAPI single page).
+One package per layer of the design; layers talk only over HTTP and files (see
+[docs/repo-layout.md](docs/repo-layout.md)): `homed/access/` (access layer: Pi config,
+web console + node registration), `homed/router/` (scheduling: Switchyard route table,
+gateway process), `homed/node/` (resources: hardware probe, presets, vLLM / llama.cpp),
+`homed/control/` (control plane: node registry, health, watchdog, staged heal).
 
 ## Model support
 
@@ -84,20 +84,20 @@ ours), console (FastAPI single page).
 | Qwen3.8-27B | ⏳ waiting for a 4-bit quant (bf16 56GB / FP8 28GB both exceed 24GB) |
 | GLM-5.3-Flash | 📋 preset reserved: 320B/18B MoE, smallest quant ~93GB — DGX Spark / 128GB-class devices |
 
-## Status (the honest version)
+## Status
 
-Single-box full stack and the failover/self-heal loop are validated on a real machine
-(2026-09-06, destructive drill included). Real cloud-API failover is wired but awaits a
-real key. Multi-device linking is validated on real machines (2026-09): `homed init` + `homed link-gpu` turn a Mac into the hub (gateway + console + local weak lane via llama.cpp) with a remote 4090 as the strong lane over an SSH tunnel — tunnel loss auto-degrades, relink auto-recovers. Auto-discovery (mDNS/join tokens) is designed but not yet built. Phase-1 assets
-(Tandem gateway, agent protocol, routing eval set) live on in docs/ and CI.
+Single-box full stack, failover/self-heal and the Mac-hub + remote-GPU link are validated
+on real machines (2026-09). Registry-driven hot-plug: `init` and `link-gpu` validated,
+`join` implemented and awaiting a two-machine LAN test. Real cloud failover is wired but
+awaits a key. Per-pool load balancing, auto-discovery and overload protection are on the
+roadmap.
 
 ## Documentation
 
 - [docs/design.md](docs/design.md) — **the system document** (design / API contract / implementation & ops; Chinese)
 - [docs/hardware-model-matrix.md](docs/hardware-model-matrix.md) — product page (hardware, config, linking, tasks)
-- [docs/agent-interface.md](docs/agent-interface.md) — agent protocol v1 · [docs/roadmap.md](docs/roadmap.md) — roadmap
+- [docs/roadmap.md](docs/roadmap.md) — roadmap
 - [docs/repo-layout.md](docs/repo-layout.md) — repository layout mapped to the design (Chinese)
-- [docs/archive/](docs/archive/) — phase-1 design history
 
 ## License
 
