@@ -67,7 +67,7 @@ Agent 循环里不是每一步都需要大模型。hint 把「这一步是什么
 2. 硬规则——请求带 `tools`，或上下文超过小模型物理容量：即使 hint 说 small 也强制
    large，响应头标注 `hint-overridden:<规则名>`（编排器可据此发现自己的 hint 标错了）;
 3. **hint**——覆盖启发式打分；
-4. 启发式打分——没有 hint 时的默认路径（`docs/routing.md`）。
+4. 启发式打分——没有 hint 时的默认路径（`docs/archive/routing.md`）。
 
 未知的 hint 值**静默忽略**、回落到启发式——新版本编排器加新词汇不会砸旧网关，
 这是前向兼容的关键规则。

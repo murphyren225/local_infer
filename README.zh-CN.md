@@ -108,14 +108,12 @@ git clone https://github.com/murphyren225/local_infer.git && cd local_infer
 
 ## 文档
 
-- [docs/design.md](docs/design.md) — **系统设计文档**（目标 / 整体流程图 / 逐组件走向与并发处理）
-- [docs/api.md](docs/api.md) — **API 文档**（全部接口的格式、字段、示例、错误）
-- [docs/tech.md](docs/tech.md) — **技术文档**（每个接口背后的技术与连接方式）
-- [homed/README.md](homed/README.md) — 组件总览（每个组件目录内有各自 README）
-- [docs/home-cluster.md](docs/home-cluster.md) — 集群集群整体设计与二期多机蓝图
-- [docs/architecture.md](docs/architecture.md) / [docs/routing.md](docs/routing.md) /
-  [docs/agent-interface.md](docs/agent-interface.md) — 一期 Tandem 网关的设计与协议
+- [docs/design.md](docs/design.md) — **系统主文档**（三部分：系统设计 / 接口规格 / 技术溯源）
+- [docs/hardware-model-matrix.md](docs/hardware-model-matrix.md) — 产品页（硬件清单 / 用户配置 / 设备联动 / 任务示例）
+- [docs/agent-interface.md](docs/agent-interface.md) — Agent 协议契约 v1（给未来编排器的接口）
 - [docs/roadmap.md](docs/roadmap.md) — 路线图
+- [docs/archive/](docs/archive/) — 一期过程文档存档（Tandem 网关设计、旧路由策略、集群一期设计）
+- [homed/README.md](homed/README.md) — 代码组件总览（每个组件目录内有各自 README）
 
 ## License
 

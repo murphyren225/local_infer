@@ -93,9 +93,10 @@ real key. Multi-device linking is validated on real machines (2026-09): `homed i
 
 ## Documentation
 
-- [docs/design.md](docs/design.md) — **System design** (goal / numbered flow diagrams / per-component walkthrough incl. concurrency; Chinese)
-- [docs/api.md](docs/api.md) — **API reference** (every endpoint: formats, fields, examples, errors; Chinese)
-- [docs/tech.md](docs/tech.md) — **Technical reference** (what implements each API and how parts connect; Chinese)
+- [docs/design.md](docs/design.md) — **the system document** (3 parts: design / API reference / technical deep-dive; Chinese)
+- [docs/hardware-model-matrix.md](docs/hardware-model-matrix.md) — product page (hardware, config, linking, tasks)
+- [docs/agent-interface.md](docs/agent-interface.md) — agent protocol v1 · [docs/roadmap.md](docs/roadmap.md) — roadmap
+- [docs/archive/](docs/archive/) — phase-1 design history
 
 ## License
 
