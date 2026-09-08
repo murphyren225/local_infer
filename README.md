@@ -46,6 +46,7 @@ Node 22+ (`npm i -g --ignore-scripts @earendil-works/pi-coding-agent`).
 
 ```bash
 git clone https://github.com/murphyren225/local_infer.git && cd local_infer
+bin/install.sh                # prerequisites: service venv + Switchyard, Pi, (CPU box) llama.cpp + 1.7B model
 # download weights (ModelScope inside China, HF elsewhere) to local dirs, then:
 bin/homed init                # one command up: probe hardware, pick preset, start lanes, gateway, console
 ./homed/test.sh all           # per-component tests: small|large|router|console|pi

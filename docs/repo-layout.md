@@ -13,6 +13,8 @@
 | `homed/inference/presets/` | 第三部分 §4.2–4.4、§5 | 每个「模型家族 × 硬件档位」一个 `.env`：模型路径、对外名、端口、引擎参数 | 校准数据是资产，独立成文件便于逐个审阅和替换；`node/presets.py` 只负责解析 |
 | `homed/control/` | 第一部分 §4 热插拔、§6 故障处理；第三部分 §6 | `registry.py` 注册表；`health.py`；`watchdog.py` 循环；`heal.py` 分段重启 | 控制平面不在数据路径上，独立成包，与三层互不 import |
 | `homed/util/` | — | `procs.py`：拉起进程、pid 文件、HTTP 健康等待 | 各层共用的机械操作，无业务含义 |
+| `bin/install.sh` | 第三部分 §1.3 | 装依赖：服务 venv 与 Switchyard、Pi、CPU 机的 llama.cpp 与 1.7B 模型；GPU 机打印 vLLM 步骤 | 每台设备跑一次，幂等；之后才是 `homed init/join` |
+| `homed/access/extensions/` | 第三部分 §2.1 | Pi 扩展（`*.ts`），每个内部系统一个文件；`init` 时同步到 `~/.pi/agent/extensions/` | 「往 Pi 里加能力」的唯一位置，不改 `pi.py` |
 | `homed/cli.py`、`bin/homed` | 第三部分 §6.3 | `init / join / link-gpu / status / stop / regen` | 只做编排，不含策略；`bin/homed` 是 `python3 -m homed` 的一行包装 |
 | `homed/test.sh`、`homed/ask.sh` | 第三部分 §6.3、§8 | HTTP 冒烟测试；一行派活 | 走公开接口，不依赖包内部 |
 | `tests/` | — | 控制平面与路由生成的单元测试，无 GPU 可跑 | 纯函数（`routes.render`、`health.mode`、`probe.choose_preset`）的测试 |

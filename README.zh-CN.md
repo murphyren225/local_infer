@@ -50,6 +50,7 @@ Node 22+（装 Pi：`npm i -g --ignore-scripts @earendil-works/pi-coding-agent`�
 
 ```bash
 git clone https://github.com/murphyren225/local_infer.git && cd local_infer
+bin/install.sh                # 装依赖:服务 venv+Switchyard、Pi、(CPU 机)llama.cpp+1.7B 模型;GPU 机打印 vLLM 步骤
 # 模型权重下载到本地(国内走 ModelScope):
 #   modelscope download --model Qwen/Qwen3-32B-AWQ  --local_dir /root/autodl-tmp/models/Qwen3-32B-AWQ
 #   modelscope download --model Qwen/Qwen3-1.7B-FP8 --local_dir /root/autodl-tmp/models/Qwen3-1.7B-FP8

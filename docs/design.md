@@ -406,8 +406,10 @@ degraded-small-large | degraded-small-cloud | degraded-all-cloud | dead`。
 
 接入层要薄，逻辑放在调度层和节点。Pi 不需要改动，接入物只有一份 provider
 配置文件。OpenHands 一类平台型 harness 自带路由和运行时，与调度层职责重叠，
-不采用。集成方式：安装 CLI，把 §2.2 的配置写入 `~/.pi/agent/models.json`；
-编排脚本会自动写。
+不采用。集成方式：`bin/install.sh` 装 Pi，`homed init` 把 §2.2 的配置写入
+`~/.pi/agent/models.json`，并把 `homed/access/extensions/*.ts` 同步到
+`~/.pi/agent/extensions/`。扩展是往 Pi 里加能力（内部系统、专用工具）的唯一位置：
+一个系统一个 TypeScript 文件，用 `pi.registerTool` 声明工具，不改 `pi.py`。
 
 ### 2.2 provider 配置规范（`~/.pi/agent/models.json`）
 
