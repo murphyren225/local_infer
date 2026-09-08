@@ -1,33 +1,42 @@
-# AI 集群 — 一张消费级显卡上的完整本地 AI 栈
+# AI 集群 — 自己的硬件上的完整本地 AI 栈
 
 [English](README.md) | **中文**
 
-> 把「Claude Code 级的 agent 体验」装进自己的硬件：Pi 当入口，Switchyard 智能分诊，
-> 大小两个开源模型共享一张卡，模型崩了自动切云端 API 兜底。全部用现成开源件，
-> 我们只造让它们变成一台「集群 AI 电脑」的胶水层。已在 RTX 4090D 真机端到端验证。
+> 把「Claude Code 级的 agent 体验」装进自己的硬件：每个人机器上的 Pi 当 harness，
+> Switchyard 智能分诊，大小两个开源模型共享一张卡，模型崩了自动切云端 API 兜底。
+> 全部用现成开源件，我们只造胶水层。已在 RTX 4090D 真机端到端验证。
+
+两套系统，形态和 Claude Code 一样：harness 在用户这边，模型在另一边，两者之间
+唯一的契约是一个网关地址：
+
+| 系统 | 装在哪 | 目录 | 入口 |
+|---|---|---|---|
+| **Pi 端** | 每个人自己的机器，一人一套 | `client/` | `bin/client setup / web` |
+| **推理端** | 集群里的设备（GPU 机、Mac、大内存主机） | `cluster/` | `bin/cluster init / join / link-gpu` |
 
 ## 一、界面介绍
 
-三个入口，按用户类型分层：
+**1. `pi` 终端（Pi 端）——给开发者**
 
-**1. Web 控制台（:6006）——给普通用户和管理员**
+在自己电脑上敲 `pi`，体验等同 Claude Code：聊天、写代码、在本机真实执行工具
+（建文件、跑命令），模型跑在集群上。`/model` 随时切换车道。接内部系统 = 在
+[client/pi/extensions/](client/pi/extensions/) 加一个 TypeScript 文件。
 
-- 聊天界面，车道下拉选择：`auto`（智能分诊）/ `small`（1.7B 前台）/ `large`（32B 专家）/ `cloud`（云端）
-- **文件上传**：拖入 txt/md/csv/json/代码文件（≤2MB），直接让模型总结、分析、提取
-- **路由透明化**：每条回答下方标注「干活的模型 · 端到端延迟 · 生成速度 tok/s」；
-  右侧面板实时显示路由器当前策略、**升级事件流**（judge 每次把任务升级到大模型的理由原文）、
-  累计请求/token 统计；顶栏徽章显示集群状态（正常 / 各种降级模式），车道红绿灯 5 秒刷新
-- 降级时徽章变橙并说明流量去向（云端或幸存车道），恢复自动变绿
+**2. 个人网页（:7000，Pi 端）——给普通用户**
 
-**2. `pi` 终端——给开发者**
+`bin/client web` 在自己电脑上起一个聊天页：车道下拉 `auto` / `small` / `large` /
+`cloud`，每条回答标注「干活的模型 · 端到端延迟」。除 Python 外零依赖。
 
-SSH 进服务器敲 `pi`，体验等同 Claude Code：聊天、写代码、真实执行工具
-（建文件、跑命令）。`/model` 随时切换四个车道。
+**3. 集群管理台（:6006，Hub）——给管理员**
 
-**3. OpenAI 兼容 API——给一切现有工具**
+设备卡片（硬件档案、在线状态、最近解码指标）、路由器当前策略、**升级事件流**
+（judge 每次把任务升级到大模型的理由原文）、累计统计；顶栏徽章显示集群状态，
+降级时变橙并说明流量去向。另保留一个带文件上传的对话区做测试。
+
+**4. OpenAI 兼容 API——给一切现有工具**
 
 ```
-POST http://<主机>:4000/v1/chat/completions    model: auto | small | large | cloud
+POST http://<Hub>:4000/v1/chat/completions    model: auto | small | large | cloud
 ```
 
 Anthropic Messages 格式同样支持（Claude 系客户端可直连）。整个 API 表面积就这么大。
@@ -41,30 +50,43 @@ Anthropic Messages 格式同样支持（Claude 系客户端可直连）。整个
 | 大车道（Qwen3-32B-AWQ） | 首 token 0.17s，38 tok/s（2 并发合计） |
 | 故障检测 → 路由切换 | ~30–40 秒（看门狗 10s 间隔 × 连续 2 次失败） |
 | 大模型崩溃自愈 | 2–5 分钟自动恢复（分段重启；配云端 key 期间零中断） |
-| 升级判决 | judge 真实触发过，理由可在控制台查看 |
+| 升级判决 | judge 真实触发过，理由可在管理台查看 |
 
 ## 三、怎么使用
 
-前置：NVIDIA 卡（24GB 档已验证）、Python 3.10+、`pip install vllm nemo-switchyard`、
-Node 22+（装 Pi：`npm i -g --ignore-scripts @earendil-works/pi-coding-agent`）。
+### 推理端（每台设备一次）
+
+前置：NVIDIA 卡（24GB 档已验证）并 `pip install vllm`，或 Mac/CPU 机（安装脚本
+自动编译 llama.cpp）；网关 venv 需要 Python 3.12+。
 
 ```bash
 git clone https://github.com/murphyren225/local_infer.git && cd local_infer
-bin/install.sh                # 装依赖:服务 venv+Switchyard、Pi、(CPU 机)llama.cpp+1.7B 模型;GPU 机打印 vLLM 步骤
+bin/install.sh                # 服务 venv + Switchyard;(CPU 机)llama.cpp + 1.7B 模型;GPU 机打印 vLLM 步骤
 # 模型权重下载到本地(国内走 ModelScope):
 #   modelscope download --model Qwen/Qwen3-32B-AWQ  --local_dir /root/autodl-tmp/models/Qwen3-32B-AWQ
 #   modelscope download --model Qwen/Qwen3-1.7B-FP8 --local_dir /root/autodl-tmp/models/Qwen3-1.7B-FP8
-bin/homed init                # 一键起栈:探测硬件、选档、起车道、起网关与控制台(32B 加载约 4 分钟)
-./homed/test.sh all           # 分层全测: small|large|router|console|pi 也可单测
-./homed/ask.sh auto "随便派个活"
+bin/cluster init              # 第一台 = Hub:探测硬件、选档、起车道、起网关与管理台(32B 加载约 4 分钟)
+bin/cluster join http://<Hub>:6006 --token JOIN-xxxx     # 局域网里的其他设备
+bin/cluster link-gpu "ssh -p 43314 root@gpu-host"        # 或经 SSH 接入远端 GPU
+./cluster/test.sh all         # 分层全测: small|large|router|console|pi 也可单测
 ```
 
-- 控制台：AutoDL 用户在实例页点「自定义服务」即得公网链接（就是 6006 端口）；
-  其他环境 `ssh -L 6006:127.0.0.1:6006 <主机> -N` 后开 http://localhost:6006
-- 云端兜底：`.env` 里写 `TOGETHER_API_KEY=...` 即启用真云端（不配则降级到幸存车道）
-- 换模型：`bin/homed init --preset <preset名>`，
-  见 [homed/inference/](homed/inference/)（新模型接入 = 加一个 preset 文件）
-- 兜底演练：`./homed/test.sh failover`（故意杀掉 32B，看自动切换和自愈全程）
+### Pi 端（每个人一次）
+
+前置：Node 22+（装 Pi）。网页只需要 Python 3。
+
+```bash
+bin/install-client.sh http://<Hub>:4000    # 装 Pi 并接到集群
+pi                                         # 终端 agent,默认车道 auto
+bin/client web --hub http://<Hub>:4000     # 个人网页 http://127.0.0.1:7000
+```
+
+- 管理台：http://<Hub>:6006（AutoDL 点「自定义服务」；其他环境
+  `ssh -L 6006:127.0.0.1:6006 <主机> -N`）
+- 云端兜底：Hub 的 `.env` 里写 `TOGETHER_API_KEY=...`（不配则降级到幸存车道）
+- 换模型：`bin/cluster init --preset <preset名>`，
+  见 [cluster/inference/](cluster/inference/)（新模型接入 = 加一个 preset 文件）
+- 兜底演练：`./cluster/test.sh failover`（故意杀掉 32B，看自动切换和自愈全程）
 
 ## 四、能做什么任务
 
@@ -72,20 +94,21 @@ bin/homed init                # 一键起栈:探测硬件、选档、起车道�
   信息提取、格式转换、起名、一句话文案
 - **专家类（32B）**：技术方案分析、代码评审与调试、合同条款风险、根因分析、
   数学推理、长文写作
-- **文件类（控制台上传）**：报表要点提取、文档摘要、CSV 初步分析、代码文件讲解
-- **Agent 类（pi）**：写脚本并运行、批量处理目录文件、真实工具调用的多步任务
+- **Agent 类（pi）**：在自己电脑上写脚本并运行、批量处理目录文件、真实工具调用的多步任务
 - `auto` 车道会自动判断以上任务该给谁干；答砸了 judge 会升级重试
 
 ## 组件架构
 
-代码按设计文档的层分包，层间只通过 HTTP 和文件通信（详见 [docs/repo-layout.md](docs/repo-layout.md)）：
+推理端按设计文档的层分包，层间只通过 HTTP 和文件通信；Pi 端是独立的包，两者互不
+import（详见 [docs/repo-layout.md](docs/repo-layout.md)）：
 
 | 包 | 层 | 用的现成件 | 我们写的部分 |
 |---|---|---|---|
-| `homed/access/` | 接入层 | [Pi](https://pi.dev/) | Pi 配置生成；网页控制台与节点登记接口 |
-| `homed/router/` | 调度层 | [NeMo Switchyard](https://github.com/NVIDIA-NeMo/Switchyard) | 路由表生成；网关进程管理 |
-| `homed/node/` | 资源层 | vLLM / llama.cpp | 硬件探测与定池；preset 解析；引擎进程 |
-| `homed/control/` | 控制平面 | — | 节点注册表、健康、看门狗、分段自愈 |
+| `client/pi/`、`client/web/` | 接入层（Pi 端） | [Pi](https://pi.dev/) | Pi 接线与扩展；个人网页与本机代理 |
+| `cluster/router/` | 调度层 | [NeMo Switchyard](https://github.com/NVIDIA-NeMo/Switchyard) | 路由表生成；网关进程管理 |
+| `cluster/node/` | 资源层 | vLLM / llama.cpp | 硬件探测与定池；preset 解析；引擎进程 |
+| `cluster/control/` | 控制平面 | — | 节点注册表、健康、看门狗、分段自愈 |
+| `cluster/access/` | 管理台 | FastAPI | 集群管理台与节点登记接口 |
 
 ## 模型支持
 
@@ -99,10 +122,11 @@ bin/homed init                # 一键起栈:探测硬件、选档、起车道�
 
 | 部分 | 状态 |
 |---|---|
-| 单机全栈（vLLM 双池 + Switchyard + Pi + 控制台 + 兜底） | 2026-09 真机验证 |
+| 单机全栈（vLLM 双池 + Switchyard + 管理台 + 兜底） | 2026-09 真机验证 |
 | 故障切换 + 分段自愈 | 破坏性演练通过（杀 32B → 40s 切换 → 自动复活） |
 | Mac Hub + 远端 GPU 联动 | 真机验证；断链自动降级、重连恢复 |
 | 注册表驱动的热插拔 | `init` / `link-gpu` 已验证；`join` 已实现待双机验证 |
+| Pi 端（接线 + 个人网页） | 本机模式可用；Hub 托管零安装模式在路线图 |
 | 云端兜底走真实 API | 逻辑已通，真实 key 待插 |
 | 池内多副本负载均衡、自动发现、过载保护 | 路线图 |
 
@@ -112,7 +136,7 @@ bin/homed init                # 一键起栈:探测硬件、选档、起车道�
 - [docs/hardware-model-matrix.md](docs/hardware-model-matrix.md) — 产品页（硬件清单 / 用户配置 / 设备联动 / 任务示例）
 - [docs/roadmap.md](docs/roadmap.md) — 路线图
 - [docs/repo-layout.md](docs/repo-layout.md) — 仓库结构与设计文档的对应（每个目录为什么存在）
-- [homed/README.md](homed/README.md) — 代码组件总览（每个组件目录内有各自 README）
+- [cluster/README.md](cluster/README.md)、[client/README.md](client/README.md) — 两套系统各自的组件总览
 
 ## License
 

@@ -1,6 +1,6 @@
 """Watchdog loop: registry × health → route table → gateway.
 
-Runs as `python -m homed.control.watchdog`. Every INTERVAL seconds it assesses the
+Runs as `python -m cluster.control.watchdog`. Every INTERVAL seconds it assesses the
 registry; a node counts as dead after MISSES consecutive failures. When the derived
 mode changes, or the registry file changed (a node joined/left), it regenerates the
 route table and restarts the gateway. Dead local lanes are handed to heal.

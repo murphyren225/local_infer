@@ -1,7 +1,7 @@
 # Pi 扩展（接内部系统的地方）
 
-往 Pi 里加能力不改 `pi.py`，而是在本目录加文件。`homed init` 时 `access/pi.py`
-把这里的 `*.ts` 同步到 `~/.pi/agent/extensions/`，Pi 启动时自动加载。
+往 Pi 里加能力不改 `setup.py`，而是在本目录加文件。`bin/client setup` 时把这里的
+`*.ts` 同步到 `~/.pi/agent/extensions/`，Pi 启动时自动加载。
 
 一个扩展 = 一个 TypeScript 文件，向 Pi 注册一个或多个工具（`pi.registerTool`）。
 工具的 `execute` 可以任意调用 HTTP（`fetch`）、文件系统或子进程，权限等于运行 Pi

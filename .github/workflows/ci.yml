@@ -15,5 +15,5 @@ jobs:
           python-version: "3.12"
       - name: Install test deps
         run: pip install pytest
-      - name: Unit tests — homed control plane & router (current)
+      - name: Unit tests — cluster control plane & router
         run: python -m pytest tests -q

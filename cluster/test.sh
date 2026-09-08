@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 # Component tests for the cluster. Each layer testable on its own:
 #
-#   ./homed/test.sh small     # inference lane: small model direct (:8002)
-#   ./homed/test.sh large     # inference lane: large model direct (:8001)
-#   ./homed/test.sh router    # Switchyard: lanes + escalation via :4000
-#   ./homed/test.sh pi        # harness: pi one-shot through the router
-#   ./homed/test.sh all       # everything, in order
+#   ./cluster/test.sh small     # inference lane: small model direct (:8002)
+#   ./cluster/test.sh large     # inference lane: large model direct (:8001)
+#   ./cluster/test.sh router    # Switchyard: lanes + escalation via :4000
+#   ./cluster/test.sh pi        # harness: pi one-shot through the router
+#   ./cluster/test.sh all       # everything, in order
 set -euo pipefail
 cd "$(dirname "$0")/.."
 

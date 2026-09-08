@@ -1,9 +1,9 @@
 #!/usr/bin/env python
-"""Web console (access layer) + node registration endpoint.
+"""Cluster admin console + node registration endpoint.
 
 Reads control-plane state from files (state/nodes.json, state/cluster_mode) and the
 gateway over HTTP; never touches engine processes. Standalone script — runs with the
-service venv, does not import the homed package.
+service venv, does not import the cluster package.
 """
 import json
 import os

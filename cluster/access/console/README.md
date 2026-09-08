@@ -1,4 +1,8 @@
-# console — Web Surface（:6006）
+# console — 集群管理台（:6006）
+
+集群侧的网页：设备与池的健康、路由模式、升级事件、累计统计，以及节点登记接口
+`POST /api/register`（`cluster join` 用）。聊天区保留为管理员的测试入口；员工用的
+个人前端在 `client/`，是另一套系统。
 
 企业用户的图形入口：`console.py`（FastAPI，3 个 API）+ `console.html`（单页）。
 

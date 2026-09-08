@@ -14,8 +14,9 @@
 | 云端 API key 一行 | 建议 | 解锁云端兜底;不填也能跑,降级用幸存车道顶班 |
 | 企业策略(云端预算上限、某类数据永不出网) | 可选 | Hub 网页上点选 |
 
-**使用期(日常)**:网页控制台(打字+拖文件)、终端 `pi`(内网版编码 agent,
-真实执行)、OpenAI/Anthropic 兼容 API(现有软件改个地址直接接入)。
+**使用期(日常)**:每人在自己电脑上装一次 Pi 端(`bin/install-client.sh`):终端 `pi`
+(内网版编码 agent,在本机真实执行)、个人网页(打字聊天);管理员看 Hub 的集群管理台;
+现有软件改个地址走 OpenAI/Anthropic 兼容 API。
 
 ## 2. 安装流程(CLI)
 
@@ -23,7 +24,7 @@
 
 ```
 $ curl -sSL https://<发布地址>/install.sh | sh
-$ homed init
+$ cluster init
   ✓ 探测硬件: RTX 4090D, 24GB 显存
   ✓ 选定档位: qwen3-24gb (强档 32B-AWQ + 弱档 1.7B-FP8)
   ✓ 下载模型(~22GB)... 启动车道... 启动网关...
@@ -34,7 +35,7 @@ $ homed init
 
 ```
 $ curl -sSL https://<发布地址>/install.sh | sh
-$ homed join <Hub内网地址> --token JOIN-XXXX
+$ cluster join <Hub内网地址> --token JOIN-XXXX
   ✓ 探测硬件 → 自动选角色(见 §4) → 注册进 Hub
 ```
 
@@ -42,7 +43,7 @@ $ homed join <Hub内网地址> --token JOIN-XXXX
 出厂预装节点镜像后,`join` 这步也能省掉:插电插网,Hub 网页点批准。
 
 状态:单机版全流程(探测→选档→起栈→自愈)已于 2026-09 在 RTX 4090D 真机验证
-(`bin/homed init`);`link-gpu` 已验证,`join` 已实现待局域网双机验证。
+(`bin/cluster init`);`link-gpu` 已验证,`join` 已实现待局域网双机验证。
 
 ## 3. 硬件清单(按预算叠加)
 
@@ -51,7 +52,7 @@ $ homed join <Hub内网地址> --token JOIN-XXXX
 | 入门档 | 一台 24GB 独显机(4090/4090D/3090,约 ¥13k-20k 或按时租) | 单机即完整系统:强+弱共存 | ✅ 实测 |
 | 标准档 | + 一台常开低功耗机(Mac/小主机) | Hub+弱档 24h 在线;独显机变按需开机(开关机=成本开关) | 📋 二期 |
 | 旗舰档 | + 一台 128GB 大内存主机(DGX Spark / 懒猫 AI Pod / Perplexity 成品机) | 长文档车道:300B MoE,26万~100万 token 上下文 | 📋 调研完成 |
-| 顺手 | 任何旧电脑 | 装 pi 当终端 | 📋 |
+| 顺手 | 员工自己的电脑 | 装 Pi 端当终端/网页 | ✅ 本机模式 |
 
 **联网要求**:所有设备在同一局域网(办公网本来就是),普通千兆网线/交换机足够。
 我们每台设备跑完整模型、按车道分工,设备间只传 KB 级 API 流量——不需要
@@ -70,7 +71,7 @@ distributed-llama 以太网张量并行)仅在单台装不下时封装成「算�
 | 128GB 主机 | 中档稠密 | GLM-5.3-Flash / DeepSeek-V4-Flash | 📋 |
 | 云端(有 key) | — | Claude/GPT/Qwen 大杯(兜底) | ✅ |
 
-换模型=管理员在 Hub 改档位名(homed/inference/presets/),不碰任何节点。
+换模型=管理员在 Hub 改档位名(cluster/inference/presets/),不碰任何节点。
 judge 与弱档同宿主。参考:Switchyard 官方出厂预置也是双档
 (强:Opus/GPT-5.5;弱:Kimi/Gemini Flash/Nemotron——NVIDIA 自家模型放走量位)。
 
@@ -92,5 +93,5 @@ judge 与弱档同宿主。参考:Switchyard 官方出厂预置也是双档
 Google Docs 等外部系统(Pi 扩展)。
 
 ---
-*工程细节:显存实测参数 homed/inference/presets/;调度逻辑 docs/design.md 第三部分 §3;
-组件边界 homed/README.md。*
+*工程细节:显存实测参数 cluster/inference/presets/;调度逻辑 docs/design.md 第三部分 §3;
+组件边界 cluster/README.md。*

@@ -1,9 +1,11 @@
-"""homed CLI — orchestrates the layers; contains no policy of its own.
+"""cluster CLI — the inference side. Orchestrates the layers; contains no policy.
 
-  homed init [--preset P]          this machine becomes the Hub (+ its local lanes)
-  homed join HUB_URL --token T     this machine joins an existing Hub (LAN)
-  homed link-gpu "SSH_TARGET"      Hub adopts a remote GPU node over an SSH tunnel
-  homed status | stop | regen
+  cluster init [--preset P]          this machine becomes the Hub (+ its local lanes)
+  cluster join HUB_URL --token T     this machine joins an existing Hub (LAN)
+  cluster link-gpu "SSH_TARGET"      Hub adopts a remote GPU node over an SSH tunnel
+  cluster status | stop | regen
+
+The client side (Pi, personal web UI) is a separate system: see client/ and bin/client.
 """
 from __future__ import annotations
 
@@ -16,14 +18,13 @@ import sys
 import urllib.request
 
 from . import paths
-from .access import pi
 from .control import health, registry
 from .control.registry import Node
 from .node import engine, presets, probe
 from .router import gateway, routes
 from .util import procs
 
-CONSOLE = paths.ROOT / "homed" / "access" / "console" / "console.py"
+CONSOLE = paths.ROOT / "cluster" / "access" / "console" / "console.py"
 
 
 def say(msg: str) -> None:
@@ -70,13 +71,6 @@ def regen() -> str:
     return m
 
 
-def route_names() -> list[str]:
-    names = ["auto", "small", "large", "cloud"]
-    if any(n.pool == "long" for n in registry.load().values()):
-        names.append("long")
-    return names
-
-
 def start_console() -> None:
     url = f"http://127.0.0.1:{paths.CONSOLE_PORT}/api/status"
     if procs.healthy(url):
@@ -90,7 +84,7 @@ def start_watchdog(heal: bool) -> None:
     if procs.alive("watchdog"):
         ok("watchdog already running")
         return
-    procs.spawn("watchdog", [sys.executable, "-m", "homed.control.watchdog"],
+    procs.spawn("watchdog", [sys.executable, "-m", "cluster.control.watchdog"],
                 env={"HOMED_HEAL": "1" if heal else "0"})
     ok("watchdog started")
 
@@ -110,14 +104,13 @@ def cmd_init(args) -> int:
         ok(f"gateway up, mode={m}")
     except RuntimeError as exc:
         fail(f"{exc}; gateway waits for a lane (join/link-gpu)")
-    pi.write(route_names())
-    ok("pi provider written to ~/.pi/agent/models.json")
     start_console()
     start_watchdog(heal=bool(lanes))
     print("\n== Hub ready")
     say(f"console   http://localhost:{paths.CONSOLE_PORT}")
     say(f"api       http://<this-host>:{paths.GATEWAY_PORT}/v1   model: auto|small|large|cloud")
-    say(f"join      homed join http://<this-host>:{paths.CONSOLE_PORT} --token {token}")
+    say(f"join      cluster join http://<this-host>:{paths.CONSOLE_PORT} --token {token}")
+    say(f"clients   bin/client setup --hub http://<this-host>:{paths.GATEWAY_PORT}   (on each user's machine)")
     return 0
 
 
@@ -186,7 +179,6 @@ def cmd_link_gpu(args) -> int:
         registry.register(Node(args.name + "-weak", "weak", args.weak_model, "http://127.0.0.1:8002/v1",
                                hw=hw, engine="remote", local=False))
     m = regen()
-    pi.write(route_names())
     ok(f"registered {args.name}, mode={m}")
     return 0
 
@@ -219,7 +211,7 @@ def cmd_regen(args) -> int:
 
 def main(argv=None) -> int:
     os.chdir(paths.ROOT)
-    p = argparse.ArgumentParser(prog="homed", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    p = argparse.ArgumentParser(prog="cluster", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = p.add_subparsers(dest="cmd", required=True)
     s = sub.add_parser("init"); s.add_argument("--preset"); s.set_defaults(fn=cmd_init)
     s = sub.add_parser("join"); s.add_argument("hub"); s.add_argument("--token", required=True); s.add_argument("--preset"); s.set_defaults(fn=cmd_join)

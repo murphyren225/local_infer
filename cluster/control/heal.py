@@ -32,7 +32,7 @@ def dispatch() -> None:
     """Spawn heal as a separate process so the watchdog loop keeps polling."""
     ensure_dirs()
     LOCK.touch()
-    subprocess.Popen([sys.executable, "-m", "homed.control.heal"], start_new_session=True,
+    subprocess.Popen([sys.executable, "-m", "cluster.control.heal"], start_new_session=True,
                      stdout=open(LOGS / "heal.log", "ab"), stderr=subprocess.STDOUT)
 
 

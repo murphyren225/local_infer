@@ -10,9 +10,20 @@
 最后的回退。部署形态是企业内网里的若干台异构设备（消费级 GPU 机、Mac、
 大内存主机），每台装一次，公司内部共用一个入口。
 
+系统分两套，形态与 Claude Code 相同：harness 在用户这边，模型在另一边。
+
+| 系统 | 装在哪 | 内容 | 仓库目录 |
+|---|---|---|---|
+| Pi 端 | 每个人自己的机器，一人一套 | Pi harness 的接线、工具扩展、个人网页前端 | `client/` |
+| 推理端 | 集群里的设备 | 网关、推理节点、控制平面、集群管理台 | `cluster/` |
+
+两套之间只有一个契约：网关地址与 OpenAI 格式的 HTTP。Pi 端不知道集群怎么
+搭，推理端不知道用户用什么 harness。下文四层里的「接入层」即 Pi 端加上任意
+第三方客户端；其余三层都在推理端。
+
 | 部分 | 实现 | 自研范围 |
 |---|---|---|
-| 接入层 | 网页控制台（FastAPI）、Pi CLI、任意 OpenAI/Anthropic 客户端 | 控制台，约 300 行 |
+| 接入层 | Pi CLI、个人网页前端、任意 OpenAI/Anthropic 客户端 | Pi 接线与个人网页，约 300 行 |
 | 调度层 | NVIDIA NeMo Switchyard | 无，仅配置 |
 | 资源层 | 每节点一个推理引擎进程（vLLM / llama.cpp）；云端 API | 无，仅启动参数 |
 | 控制平面 | 健康探测、路由表生成、进程生命周期 | 约 400 行 shell |
@@ -23,7 +34,7 @@
 |---|---|
 | 节点 | 运行推理引擎的一台物理设备。对外只有 OpenAI 格式 HTTP 和 `/health` |
 | 池 | 一组可互换的节点。现有三个：弱池（小模型，默认流量）、强池（大模型）、云端 |
-| Hub | 运行网关、控制台和控制平面的设备 |
+| Hub | 运行网关、集群管理台和控制平面的设备 |
 | 路由表 | 网关的全部配置，由控制平面按当前健康的节点集合生成 |
 | 判定器 | 复用弱池模型的一次分类调用，决定会话是否升级到强池 |
 | 会话粘性 | 升级过的会话之后固定走强池 |
@@ -36,8 +47,8 @@ flowchart TD
     U(("User")) -- "1" --> ACCESS
     subgraph ACCESS["接入层"]
         direction LR
-        W1["网页控制台 :6006"]
-        W2["Pi CLI"]
+        W1["Pi CLI"]
+        W2["个人网页 :7000"]
         W3["API 客户端"]
     end
     ACCESS -- "2  HTTP" --> G
@@ -68,7 +79,7 @@ flowchart TD
     end
 ```
 
-1. 用户从网页、Pi 终端或程序发起请求。
+1. 用户从 Pi 终端、个人网页或程序发起请求。
 2. 接入层把输入包装成 OpenAI 格式：`model: "auto"` 加 `messages`。Anthropic
    格式的客户端由网关在入站时翻译，之后路径相同。
 3. 网关决定去向，转发时把 `model` 改成目标节点的真实模型名。顺序：显式指定
@@ -176,6 +187,10 @@ flowchart TD
 1. 可以和推理引擎同机。Pi 是 Node 进程，只用 CPU 和少量内存，不碰 GPU。
 2. 推理分布在多台设备时，harness 可以放在任意设备上，包括用户自己的机器。
 
+当前实现取第 2 种：Pi 端装在用户本机（`client/`），工具作用于用户自己的文件，
+与 Claude Code 的本地模式同构。第 1 种（Hub 上按人托管 Pi 会话、浏览器零安装）
+在路线图，届时 §7.3 的隔离要求成为硬性条件。
+
 ### 7.3 同机部署的隔离要求
 
 | 维度 | 要求 |
@@ -202,7 +217,8 @@ flowchart TD
 | 端口 | 服务 | 面向谁 |
 |---|---|---|
 | `HUB:4000` | 网关（主 API） | 所有客户端 |
-| `HUB:6006` | 控制台（网页 + 其配套 API） | 浏览器用户 |
+| `HUB:6006` | 集群管理台（网页 + 其配套 API、节点登记） | 管理员、加入的节点 |
+| 本机 `:7000` | 个人网页（Pi 端，可选） | 本人的浏览器 |
 | 节点 `:8001` / `:8002` | 推理引擎（内部接口） | 仅网关调用，客户端不应直连 |
 
 ---
@@ -315,7 +331,7 @@ data: [DONE]
 
 ---
 
-## 3. 控制台配套 API（`HUB:6006`）
+## 3. 集群管理台配套 API（`HUB:6006`）
 
 ### 3.1 `GET /` — 聊天页面（HTML）
 
@@ -397,19 +413,34 @@ degraded-small-large | degraded-small-cloud | degraded-all-cloud | dead`。
 | CPU/Mac 推理 | llama.cpp | b10819 / 源码构建 | MIT | 官方 macOS 二进制要求 ≥ 13.3，更旧系统需源码编译 |
 | 备选 GPU 推理 | SGLang | 未部署 | Apache-2.0 | 见 §4.4 |
 | Harness | Pi | 0.74.2 | 开源（pi.dev） | Node ≥ 22.14 可运行；0.75+ 需 Node ≥ 22.19 |
-| 控制台 | FastAPI + uvicorn | — | MIT | 依赖 python-multipart |
+| 集群管理台 | FastAPI + uvicorn | — | MIT | 依赖 python-multipart |
+| 个人网页服务 | Python 标准库 `http.server` | — | — | 员工机器零依赖 |
 | 默认模型 | Qwen3 系（32B-AWQ / 1.7B） | — | Apache-2.0 | 生产部署应锁定权重 revision |
 
 ## 2. 接入层
 
-### 2.1 Pi：选型理由与集成方式
+### 2.1 Pi 端：选型理由与集成方式
 
 接入层要薄，逻辑放在调度层和节点。Pi 不需要改动，接入物只有一份 provider
 配置文件。OpenHands 一类平台型 harness 自带路由和运行时，与调度层职责重叠，
-不采用。集成方式：`bin/install.sh` 装 Pi，`homed init` 把 §2.2 的配置写入
-`~/.pi/agent/models.json`，并把 `homed/access/extensions/*.ts` 同步到
-`~/.pi/agent/extensions/`。扩展是往 Pi 里加能力（内部系统、专用工具）的唯一位置：
-一个系统一个 TypeScript 文件，用 `pi.registerTool` 声明工具，不改 `pi.py`。
+不采用。
+
+Pi 端是独立的一套（`client/`），装在每个人自己的机器上，与推理端不共享代码。
+安装与接线：`bin/install-client.sh http://<Hub>:4000`，等价于装 Pi 再执行
+`bin/client setup --hub …`。后者写三样东西：`~/.pi/agent/models.json`（§2.2）、
+`~/.pi/agent/settings.json`（默认 provider/model 为 `home/auto`；压缩阈值
+`reserveTokens` 1024，因为我们的上下文窗口只有 5–8K，Pi 默认的 16384 会导致
+永远触发压缩），以及把 `client/pi/extensions/*.ts` 同步到 `~/.pi/agent/extensions/`。
+扩展是往 Pi 里加能力（内部系统、专用工具）的唯一位置：一个系统一个 TypeScript
+文件，用 `pi.registerTool` 声明工具，不改 `setup.py`。
+
+Pi 端的 CLI：
+
+| 命令 | 语义 |
+|---|---|
+| `client setup --hub URL` | 接线；可重复执行，只覆盖 `home` provider |
+| `client web --hub URL [--port 7000]` | 起个人网页（§2.3） |
+| `client status` | 显示当前接线与已装扩展 |
 
 ### 2.2 provider 配置规范（`~/.pi/agent/models.json`）
 
@@ -443,13 +474,18 @@ degraded-small-large | degraded-small-cloud | degraded-all-cloud | dead`。
 | `models[].contextWindow` | 不得超过对应池的引擎 `max-model-len`，否则 Pi 会构造超限请求收到 400 |
 | `cost` | 本地池填零；该文件在 Pi 内 `/model` 时热加载 |
 
-### 2.3 控制台
+### 2.3 两个网页：个人前端与集群管理台
 
-单页应用（`homed/console/`），页面五个区域：对话流（每条回答标注实际执行
-模型、端到端延迟、tok/s）、设备卡片（在线状态、硬件档案、最近一次解码指标）、
-路由策略说明（随 `cluster_mode` 变化）、升级事件流（判定器结论原文）、累计
-统计。数据来源为 5 秒轮询 `GET /api/status`。三个后端接口的规格见
-第二部分 §3。控制台不含路由逻辑，仅代理与展示。
+个人网页（Pi 端，`client/web/`，`:7000`，每人本机一份）：只有对话。车道选择
+`auto/small/large/cloud`，每条回答标注实际执行模型与端到端延迟。由 `client/serve.py`
+托管，一个标准库 HTTP 服务，把 `/v1/*` 原样代理到网关，这样网页不需要网关开
+CORS，也不需要在员工机器上装任何依赖。不含上传、不含集群状态。
+
+集群管理台（推理端，`cluster/access/console/`，Hub `:6006`，全集群一份）：设备
+卡片（在线状态、硬件档案、最近一次解码指标）、路由策略说明（随 `cluster_mode`
+变化）、升级事件流（判定器结论原文）、累计统计，以及节点登记接口
+`POST /api/register`。保留一个带文件上传的对话区作为管理员测试入口。数据来源为
+5 秒轮询 `GET /api/status`；接口规格见第二部分 §3。两个网页都不含路由逻辑。
 
 ### 2.4 第三方客户端接入
 
@@ -494,7 +530,7 @@ switchyard serve --routing-profiles state/routes.yaml \
 
 ### 3.2 路由表规范（`state/routes.yaml`）
 
-由 `homed/router/routes.py` 按注册表与当前健康生成，手改会在下次生成时
+由 `cluster/router/routes.py` 按注册表与当前健康生成，手改会在下次生成时
 被覆盖。顶层仅 `defaults` 与 `routes` 两键。
 
 ```yaml
@@ -618,7 +654,7 @@ vLLM 与 SGLang 的取舍按任务负载：
 
 ### 4.2 vLLM 节点规范
 
-参数由 preset 文件承载（`homed/inference/presets/`）。24GB 档实测值：
+参数由 preset 文件承载（`cluster/inference/presets/`）。24GB 档实测值：
 
 | 参数 | 值（24GB 档） | 作用与约束 |
 |---|---|---|
@@ -732,7 +768,7 @@ RoCE 配置出厂预置，对集群表现为一个节点、一个 URL；组网�
 | `state/nodes.json` | CLI（init/link-gpu）、注册接口（join） | routes 生成器、控制台 | 节点注册表：名称/池/模型/地址/硬件 |
 | `state/preset` | CLI | heal | 本机 preset 名 |
 | `state/join_token` | init | 注册接口 | 加入口令 |
-| `homed/inference/presets/*.env` | 人（校准后固化） | 编排脚本 | 节点档位参数 |
+| `cluster/inference/presets/*.env` | 人（校准后固化） | 编排脚本 | 节点档位参数 |
 | `logs/*.info` | CLI 探测 | 控制台 | 设备硬件档案 |
 | `logs/*.pid` | 各启动器 | stop/status/看门狗 | 进程句柄 |
 | `.env` | 管理员 | router/routes.py | 云端凭据 |
@@ -752,7 +788,7 @@ stateDiagram-v2
 条件为连续 2 次失败；控制平面自身失效的判据是该文件时间戳超过 2×周期
 不更新，此时数据面照常但失去自动降级能力。
 
-### 6.3 CLI 规范（`bin/homed`，即 `python3 -m homed`）
+### 6.3 CLI 规范（`bin/cluster`，即 `python3 -m cluster`）
 
 | 命令 | 语义 | 前置条件 | 产物 | 失败行为 |
 |---|---|---|---|---|
@@ -764,7 +800,8 @@ stateDiagram-v2
 | `regen` | 强制按当前健康重生成路由表并重启网关 | — | — | — |
 
 单 GPU 机整机部署即 `init`（自动选 `qwen3-24gb` preset，先起强池再起弱池）。
-HTTP 冒烟 `homed/test.sh [small|large|router|console|pi|failover|all]`。
+HTTP 冒烟 `cluster/test.sh [small|large|router|console|pi|failover|all]`；其中 `pi`
+一项需要本机已执行过 `bin/client setup`。
 
 ## 7. 并发与容量
 
@@ -849,7 +886,7 @@ profiling。处置：看门狗自动降级并自愈，无需人工；复发则�
 
 **案例 3：远端节点断连（隧道）。** 症状：`cluster_mode` 变
 `degraded-large-*`，设备卡片红点。处置：隧道循环每 5 秒自动重连；对端
-关机则属预期降级，恢复后 `homed link-gpu …` 归队。
+关机则属预期降级，恢复后 `cluster link-gpu …` 归队。
 
 **案例 4：网关启动即退。** 症状：`/v1/models` 连接拒绝，
 `switchyard.log` 单行 `error: invalid route bundle: …`。根因：路由表字段
@@ -875,7 +912,8 @@ key 只存 Hub 的 `.env`。上传文件不落盘，仅注入当次请求；对�
 
 | 设备 | 进程 | 端口 |
 |---|---|---|
-| Hub | Switchyard 网关 / 控制台 / 弱池引擎 / 看门狗 /（多机时）SSH 隧道循环 | 4000 / 6006 / 8002 |
+| Hub | Switchyard 网关 / 集群管理台 / 弱池引擎 / 看门狗 /（多机时）SSH 隧道循环 | 4000 / 6006 / 8002 |
+| 用户机器 | Pi 进程 /（可选）个人网页服务 | — / 7000（仅本机） |
 | GPU 节点 | vLLM 强池引擎 | 8001 |
 
 ## 附录 B：OpenAI / Anthropic 协议对照速查

@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# Install prerequisites for a homed node (idempotent). Run once per device, then bin/homed init|join.
+# Install prerequisites for a cluster node (idempotent). Run once per device, then bin/cluster init|join.
+# This is the inference side only; user machines run bin/install-client.sh instead.
 #
 #   bin/install.sh            # everything this device needs
 #   bin/install.sh --no-model # skip the weak-lane model download
 #
 # What it does, by layer (docs/design.md):
 #   调度层  Python >= 3.12 venv at ~/.homed/venv with nemo-switchyard + console deps
-#   接入层  Pi CLI via npm (if npm present), extensions synced later by `homed init`
 #   资源层  NVIDIA box: prints the vLLM + model steps (environment-specific, not automated here)
 #           CPU/Mac box: llama.cpp binary (download, or build when the OS is too old) + 1.7B GGUF
 set -euo pipefail
@@ -29,18 +29,6 @@ done
 "$VENV/bin/pip" install -q nemo-switchyard fastapi uvicorn httpx python-multipart pyyaml
 ok "switchyard $("$VENV/bin/pip" show nemo-switchyard | awk '/^Version/{print $2}') in $VENV"
 
-# ---- 接入层: Pi -------------------------------------------------------------
-say "Pi CLI"
-if command -v pi >/dev/null; then
-  ok "pi $(pi --version 2>/dev/null | head -1) already installed"
-elif command -v npm >/dev/null; then
-  npm install -g --ignore-scripts @earendil-works/pi-coding-agent >/dev/null 2>&1 && ok "pi installed" \
-    || echo "  ✗ npm install failed; install Node >= 22 and retry"
-else
-  echo "  - npm not found; Pi is optional on pure inference nodes. On user machines: install Node >= 22 then"
-  echo "    npm install -g --ignore-scripts @earendil-works/pi-coding-agent"
-fi
-
 # ---- 资源层 ---------------------------------------------------------------
 if command -v nvidia-smi >/dev/null; then
   say "NVIDIA node: vLLM lane (not automated — environment specific)"
@@ -48,7 +36,7 @@ if command -v nvidia-smi >/dev/null; then
   echo "  2. download weights to a local dir, e.g. (ModelScope inside China):"
   echo "       modelscope download --model Qwen/Qwen3-32B-AWQ  --local_dir $MODELS/Qwen3-32B-AWQ"
   echo "       modelscope download --model Qwen/Qwen3-1.7B-FP8 --local_dir $MODELS/Qwen3-1.7B-FP8"
-  echo "  3. set LARGE_MODEL_PATH / SMALL_MODEL_PATH if not using $MODELS, then: bin/homed init"
+  echo "  3. set LARGE_MODEL_PATH / SMALL_MODEL_PATH if not using $MODELS, then: bin/cluster init"
 else
   say "CPU/Mac node: llama.cpp"
   LLAMA="$HOMED/pkg/src/build/bin/llama-server"
@@ -89,4 +77,4 @@ else
   fi
 fi
 
-say "done. Next: bin/homed init   (first device)   or   bin/homed join <hub> --token <t>"
+say "done. Next: bin/cluster init   (first device)   or   bin/cluster join <hub> --token <t>"

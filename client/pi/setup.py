@@ -1,42 +1,46 @@
-"""Pi provider config (~/.pi/agent/models.json) — the only harness integration point."""
+"""Pi harness wiring (client side). Writes three things under ~/.pi/agent/:
+
+  models.json   provider "home" → the cluster gateway; one entry per route
+  settings.json defaults (provider/model) and compaction sized for our context windows
+  extensions/   our tool extensions, copied from client/pi/extensions/
+
+Input is only the gateway URL. Nothing here knows how the cluster is built.
+"""
 from __future__ import annotations
 
 import json
 import shutil
 from pathlib import Path
 
-from ..paths import GATEWAY_PORT, ROOT
+ROOT = Path(__file__).resolve().parents[2]
+EXTENSIONS_SRC = ROOT / "client" / "pi" / "extensions"
+PI_HOME = Path.home() / ".pi" / "agent"
 
-EXTENSIONS_SRC = ROOT / "homed" / "access" / "extensions"
-
+ROUTES = ["auto", "small", "large", "cloud"]
 CONTEXT = {"auto": 5120, "small": 8192, "large": 5120, "cloud": 32768, "long": 65536}
 
 
-def write(routes: list[str], host: str = "127.0.0.1") -> Path:
+def write_models(gateway_url: str, routes: list[str] | None = None) -> Path:
+    routes = routes or ROUTES
     models = [
         {"id": r, "name": f"Cluster {r}", "input": ["text"],
          "contextWindow": CONTEXT.get(r, 5120), "maxTokens": 1024,
          "cost": {"input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0}}
         for r in routes
     ]
-    cfg = {"providers": {"home": {"baseUrl": f"http://{host}:{GATEWAY_PORT}/v1",
+    cfg = {"providers": {"home": {"baseUrl": gateway_url.rstrip("/"),
                                   "api": "openai-completions", "apiKey": "home",
                                   "models": models}}}
-    path = Path.home() / ".pi" / "agent" / "models.json"
+    path = PI_HOME / "models.json"
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(cfg, indent=2, ensure_ascii=False))
-    sync_extensions()
-    write_settings()
     return path
 
 
 def write_settings() -> Path:
-    """Merge cluster-appropriate defaults into ~/.pi/agent/settings.json.
-
-    Pi auto-compacts when contextTokens > contextWindow - compaction.reserveTokens
-    (reserve defaults to 16384). Our lanes declare 5120–8192 token windows, so the
-    default would trigger compaction on every turn; scale the reserve down."""
-    path = Path.home() / ".pi" / "agent" / "settings.json"
+    """Pi auto-compacts when contextTokens > contextWindow - reserveTokens (reserve
+    defaults to 16384); our lanes declare 5–8K windows, so scale the reserve down."""
+    path = PI_HOME / "settings.json"
     try:
         cfg = json.loads(path.read_text()) if path.exists() else {}
     except ValueError:
@@ -52,12 +56,16 @@ def write_settings() -> Path:
 
 
 def sync_extensions() -> int:
-    """Copy homed/access/extensions/*.ts into Pi's extension dir. Adding an internal
-    system = adding one .ts file there; nothing else changes."""
-    dst = Path.home() / ".pi" / "agent" / "extensions"
+    dst = PI_HOME / "extensions"
     dst.mkdir(parents=True, exist_ok=True)
     n = 0
     for src in EXTENSIONS_SRC.glob("*.ts"):
         shutil.copy2(src, dst / src.name)
         n += 1
     return n
+
+
+def setup(gateway_url: str) -> dict:
+    return {"models": str(write_models(gateway_url)),
+            "settings": str(write_settings()),
+            "extensions": sync_extensions()}

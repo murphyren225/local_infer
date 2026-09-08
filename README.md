@@ -1,30 +1,40 @@
-# AI Cluster — a complete local AI stack on one consumer GPU
+# AI Cluster — a complete local AI stack on your own hardware
 
 **English** | [中文](README.zh-CN.md)
 
-> A Claude-Code-grade agent experience on your own hardware: Pi as the entrypoint,
-> Switchyard for smart triage, a large + small open model sharing one GPU, and automatic
-> cloud-API failover when a local model dies. Everything is stock open-source parts —
-> we only build the glue that turns them into one "AI cluster".
-> Validated end-to-end on a real RTX 4090D.
+> A Claude-Code-grade agent experience on your own hardware: Pi as the harness on each
+> person's machine, Switchyard for smart triage, a large + small open model sharing one
+> GPU, and automatic cloud-API failover when a local model dies. Everything is stock
+> open-source parts — we only build the glue. Validated end-to-end on a real RTX 4090D.
+
+Two systems, shaped like Claude Code — the harness sits with the user, the models sit
+on the other side, and the only contract between them is one gateway URL:
+
+| System | Where it runs | Directory | Entrypoint |
+|---|---|---|---|
+| **Client (Pi side)** | every person's own machine, one per person | `client/` | `bin/client setup / web` |
+| **Cluster (inference side)** | the devices in the cluster (GPU box, Mac, big-RAM host) | `cluster/` | `bin/cluster init / join / link-gpu` |
 
 ## 1. Interfaces
 
-**Web console (:6006)** — for everyday users and admins: chat with a lane picker
-(`auto`/`small`/`large`/`cloud`), **file upload** (txt/md/csv/json/code, ≤2MB) for
-summarize/analyze tasks, and full routing transparency — every answer is annotated with
-the model that did the work, end-to-end latency and tok/s; a live side panel shows the
-router's current policy, the **escalation event stream** (the judge's verbatim reasons
-for upgrading a task to the 32B), cumulative stats, and a cluster health badge that turns
-orange in degraded mode and explains where traffic is going.
+**`pi` in a terminal** (client side) — a Claude-Code-like coding agent running against
+your own cluster, with real tool execution on your machine. `/model` switches lanes;
+tools for internal systems are added as one TypeScript file each under
+[client/pi/extensions/](client/pi/extensions/).
 
-**`pi` in a terminal** — for developers: a Claude-Code-like coding agent running on your
-own GPU, with real tool execution. `/model` switches lanes.
+**Personal web UI (:7000, client side)** — `bin/client web` starts a chat page on your
+own machine: lane picker (`auto`/`small`/`large`/`cloud`), every answer annotated with
+the model that did the work and the end-to-end latency. Zero dependencies beyond Python.
+
+**Cluster admin console (:6006, Hub)** — for admins: device cards with hardware
+profiles and health, the router's current policy, the **escalation event stream** (the
+judge's verbatim reasons for upgrading a task to the 32B), cumulative stats, a health
+badge that turns orange in degraded mode, plus a chat area with file upload for testing.
 
 **OpenAI-compatible API** — for every existing tool:
 
 ```
-POST http://<host>:4000/v1/chat/completions    model: auto | small | large | cloud
+POST http://<hub>:4000/v1/chat/completions    model: auto | small | large | cloud
 ```
 
 Anthropic Messages format is also accepted. That is the entire API surface.
@@ -41,41 +51,57 @@ Anthropic Messages format is also accepted. That is the entire API surface.
 
 ## 3. How to use
 
-Prereqs: NVIDIA GPU (24GB tier validated), Python 3.10+, `pip install vllm nemo-switchyard`,
-Node 22+ (`npm i -g --ignore-scripts @earendil-works/pi-coding-agent`).
+### Cluster side (once per device)
+
+Prereqs: NVIDIA GPU (24GB tier validated) with `pip install vllm`, or a Mac/CPU box
+(llama.cpp is built by the installer); Python 3.12+ for the gateway venv.
 
 ```bash
 git clone https://github.com/murphyren225/local_infer.git && cd local_infer
-bin/install.sh                # prerequisites: service venv + Switchyard, Pi, (CPU box) llama.cpp + 1.7B model
+bin/install.sh                # service venv + Switchyard; (CPU box) llama.cpp + 1.7B model
 # download weights (ModelScope inside China, HF elsewhere) to local dirs, then:
-bin/homed init                # one command up: probe hardware, pick preset, start lanes, gateway, console
-./homed/test.sh all           # per-component tests: small|large|router|console|pi
-./homed/ask.sh auto "any task"
+bin/cluster init              # first device = Hub: probe hardware, pick preset, start lanes, gateway, console
+bin/cluster join http://<hub>:6006 --token JOIN-xxxx     # any further device on the LAN
+bin/cluster link-gpu "ssh -p 43314 root@gpu-host"        # or adopt a remote GPU over SSH
+./cluster/test.sh all         # per-component tests: small|large|router|console|pi
 ```
 
-- Console access: AutoDL users click "Custom Service" (port 6006); otherwise
-  `ssh -L 6006:127.0.0.1:6006 <host> -N` and open http://localhost:6006
-- Cloud failover: put `TOGETHER_API_KEY=...` in `.env` for a real cloud tier
-- Model switching: `bin/homed init --preset <name>` — adding a model
-  family = adding one preset file, see [homed/inference/](homed/inference/)
-- Failover drill: `./homed/test.sh failover` (kills the 32B on purpose, watches the
+### Client side (once per person)
+
+Prereqs: Node 22+ (for Pi). Python 3 only for the optional web page.
+
+```bash
+bin/install-client.sh http://<hub>:4000    # installs Pi and wires it to the cluster
+pi                                         # terminal agent, default lane auto
+bin/client web --hub http://<hub>:4000     # personal web UI at http://127.0.0.1:7000
+```
+
+- Admin console: http://<hub>:6006 (on AutoDL click "Custom Service"; elsewhere
+  `ssh -L 6006:127.0.0.1:6006 <host> -N`)
+- Cloud failover: put `TOGETHER_API_KEY=...` in the Hub's `.env`
+- Model switching: `bin/cluster init --preset <name>` — adding a model
+  family = adding one preset file, see [cluster/inference/](cluster/inference/)
+- Failover drill: `./cluster/test.sh failover` (kills the 32B on purpose, watches the
   auto-switch and self-heal complete)
 
 ## 4. What it can do
 
 Front-desk tasks on the small lane at ~zero cost (translate, summarize, rewrite,
 proofread, classify, extract, rename); expert tasks on the 32B (design analysis, code
-review, contract risk, root-cause analysis, math); file analysis via console upload;
-multi-step agent tasks with real tool execution via pi. The `auto` lane decides who does
-what, and the judge silently escalates when the small model's answer isn't good enough.
+review, contract risk, root-cause analysis, math); multi-step agent tasks with real tool
+execution via pi on your own files. The `auto` lane decides who does what, and the
+judge silently escalates when the small model's answer isn't good enough.
 
 ## Components
 
-One package per layer of the design; layers talk only over HTTP and files (see
-[docs/repo-layout.md](docs/repo-layout.md)): `homed/access/` (access layer: Pi config,
-web console + node registration), `homed/router/` (scheduling: Switchyard route table,
-gateway process), `homed/node/` (resources: hardware probe, presets, vLLM / llama.cpp),
-`homed/control/` (control plane: node registry, health, watchdog, staged heal).
+The cluster package has one subpackage per layer of the design; layers talk only over
+HTTP and files (see [docs/repo-layout.md](docs/repo-layout.md)):
+`cluster/router/` (scheduling: Switchyard route table, gateway process),
+`cluster/node/` (resources: hardware probe, presets, vLLM / llama.cpp),
+`cluster/control/` (control plane: node registry, health, watchdog, staged heal),
+`cluster/access/` (admin console + node registration). The client package is
+`client/pi/` (Pi wiring + extensions) and `client/web/` + `client/serve.py` (personal
+web UI). The two packages never import each other.
 
 ## Model support
 
@@ -89,9 +115,9 @@ gateway process), `homed/node/` (resources: hardware probe, presets, vLLM / llam
 
 Single-box full stack, failover/self-heal and the Mac-hub + remote-GPU link are validated
 on real machines (2026-09). Registry-driven hot-plug: `init` and `link-gpu` validated,
-`join` implemented and awaiting a two-machine LAN test. Real cloud failover is wired but
-awaits a key. Per-pool load balancing, auto-discovery and overload protection are on the
-roadmap.
+`join` implemented and awaiting a two-machine LAN test. Client side: Pi wiring and the
+personal web UI run locally; a Hub-hosted zero-install mode is on the roadmap. Real
+cloud failover is wired but awaits a key.
 
 ## Documentation
 

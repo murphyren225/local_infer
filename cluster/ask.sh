@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # 给任意车道派活的最简入口:
-#   ./homed/ask.sh small "把这句话翻译成英文:今天很忙"
-#   ./homed/ask.sh large "分析一下微服务的利弊"
-#   ./homed/ask.sh auto  "随便什么任务,路由器自己决定谁干"
+#   ./cluster/ask.sh small "把这句话翻译成英文:今天很忙"
+#   ./cluster/ask.sh large "分析一下微服务的利弊"
+#   ./cluster/ask.sh auto  "随便什么任务,路由器自己决定谁干"
 # 第一个参数是车道 (auto|small|large|cloud),后面全是你的任务。
 set -euo pipefail
 MODEL=${1:?用法: ask.sh <auto|small|large|cloud> "你的任务"}

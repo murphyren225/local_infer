@@ -38,7 +38,7 @@ def probe() -> Hardware:
 
 
 def choose_preset(hw: Hardware) -> str:
-    """Map hardware to a preset name. Presets live in homed/inference/presets/."""
+    """Map hardware to a preset name. Presets live in cluster/inference/presets/."""
     if hw.kind == "nvidia":
         if hw.vram_mib >= 22000:
             return "qwen3-24gb"        # strong 32B + weak 1.7B slice (measured)

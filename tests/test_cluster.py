@@ -8,10 +8,10 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from homed.control import health, registry            # noqa: E402
-from homed.control.registry import Node               # noqa: E402
-from homed.node import presets, probe                 # noqa: E402
-from homed.router import routes                       # noqa: E402
+from cluster.control import health, registry            # noqa: E402
+from cluster.control.registry import Node               # noqa: E402
+from cluster.node import presets, probe                 # noqa: E402
+from cluster.router import routes                       # noqa: E402
 
 
 @pytest.fixture

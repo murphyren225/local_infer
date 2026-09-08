@@ -9,7 +9,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 STATE = ROOT / "state"
 LOGS = ROOT / "logs"
-PRESETS = ROOT / "homed" / "inference" / "presets"
+PRESETS = ROOT / "cluster" / "inference" / "presets"
 ROUTES_FILE = STATE / "routes.yaml"
 MODE_FILE = STATE / "cluster_mode"
 REGISTRY_FILE = STATE / "nodes.json"
