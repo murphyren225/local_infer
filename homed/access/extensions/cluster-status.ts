@@ -1,10 +1,11 @@
 // Pi extension template: one tool that reads the cluster console's /api/status.
 // Copy this file to add another internal system: rename the tool, change the URL/params.
-import { Type } from "@sinclair/typebox";
+import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import { Type } from "typebox";
 
 const CONSOLE = process.env.HOMED_CONSOLE_URL ?? "http://127.0.0.1:6006";
 
-export default function (pi: any) {
+export default function (pi: ExtensionAPI) {
   pi.registerTool({
     name: "cluster_status",
     label: "Cluster status",

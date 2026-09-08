@@ -26,6 +26,28 @@ def write(routes: list[str], host: str = "127.0.0.1") -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(cfg, indent=2, ensure_ascii=False))
     sync_extensions()
+    write_settings()
+    return path
+
+
+def write_settings() -> Path:
+    """Merge cluster-appropriate defaults into ~/.pi/agent/settings.json.
+
+    Pi auto-compacts when contextTokens > contextWindow - compaction.reserveTokens
+    (reserve defaults to 16384). Our lanes declare 5120–8192 token windows, so the
+    default would trigger compaction on every turn; scale the reserve down."""
+    path = Path.home() / ".pi" / "agent" / "settings.json"
+    try:
+        cfg = json.loads(path.read_text()) if path.exists() else {}
+    except ValueError:
+        cfg = {}
+    cfg.setdefault("defaultProvider", "home")
+    cfg.setdefault("defaultModel", "auto")
+    comp = cfg.setdefault("compaction", {})
+    comp.setdefault("reserveTokens", 1024)
+    comp.setdefault("keepRecentTokens", 2048)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(cfg, indent=2))
     return path
 
 
