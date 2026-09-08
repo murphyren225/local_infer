@@ -12,8 +12,8 @@ on the other side, and the only contract between them is one gateway URL:
 
 | System | Where it runs | Directory | Entrypoint |
 |---|---|---|---|
-| **Client (Pi side)** | every person's own machine, one per person | `client/` | `bin/client setup / web` |
-| **Cluster (inference side)** | the devices in the cluster (GPU box, Mac, big-RAM host) | `cluster/` | `bin/cluster init / join / link-gpu` |
+| **Personal side (harness)** | every person's own machine, one per person | `client/` | `bin/client setup / web` |
+| **Model side (Switchyard + inference)** | the devices in the cluster (GPU box, Mac, big-RAM host) | `cluster/` | `bin/cluster init / join / link-gpu` |
 
 ## 1. Interfaces
 

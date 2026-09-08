@@ -1,6 +1,6 @@
-# client — Pi 端（每人一套）
+# client — 个人端（每人一套）
 
-和 `cluster/`（推理端）是两套系统，互不 import。两者之间唯一的契约是网关地址：
+和 `cluster/`（模型端）是两套系统，互不 import。两者之间唯一的契约是网关地址：
 OpenAI 格式的 HTTP。
 
 | 目录 | 内容 |

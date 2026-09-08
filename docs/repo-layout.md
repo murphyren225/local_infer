@@ -7,13 +7,13 @@
 
 | 系统 | 目录 | 装在哪 | 入口 |
 |---|---|---|---|
-| 推理端 | `cluster/` | 集群里的每台设备（GPU 机、Mac、大内存主机） | `bin/cluster init / join / link-gpu` |
-| Pi 端 | `client/` | 每个人自己的机器，一人一套 | `bin/client setup / web` |
+| 模型端 | `cluster/` | 集群里的每台设备（GPU 机、Mac、大内存主机） | `bin/cluster init / join / link-gpu` |
+| 个人端 | `client/` | 每个人自己的机器，一人一套 | `bin/client setup / web` |
 
 两者互不 import。唯一契约是网关地址（`http://<Hub>:4000`，OpenAI 格式）。
 这与 Claude Code 的形态一致：harness 在用户这边，模型在另一边。
 
-## 推理端：`cluster/`（对应 design.md 第一部分的四层）
+## 模型端：`cluster/`（对应 design.md 第一部分的四层）
 
 | 路径 | 设计文档 | 内容 | 为什么放这里 |
 |---|---|---|---|
@@ -28,7 +28,7 @@
 | `cluster/test.sh`、`cluster/ask.sh` | 第三部分 §6.3、§8 | HTTP 冒烟测试；一行派活 | 走公开接口，不依赖包内部 |
 | `tests/` | — | 控制平面与路由生成的单元测试，无 GPU 可跑 | 纯函数（`routes.render`、`health.mode`、`probe.choose_preset`）的测试 |
 
-## Pi 端：`client/`（对应 design.md 第三部分 §2）
+## 个人端：`client/`（对应 design.md 第三部分 §2）
 
 | 路径 | 设计文档 | 内容 | 为什么放这里 |
 |---|---|---|---|

@@ -11,18 +11,18 @@
 
 | 系统 | 装在哪 | 目录 | 入口 |
 |---|---|---|---|
-| **Pi 端** | 每个人自己的机器，一人一套 | `client/` | `bin/client setup / web` |
-| **推理端** | 集群里的设备（GPU 机、Mac、大内存主机） | `cluster/` | `bin/cluster init / join / link-gpu` |
+| **个人端** | 每个人自己的机器，一人一套 | `client/` | `bin/client setup / web` |
+| **模型端** | 集群里的设备（GPU 机、Mac、大内存主机） | `cluster/` | `bin/cluster init / join / link-gpu` |
 
 ## 一、界面介绍
 
-**1. `pi` 终端（Pi 端）——给开发者**
+**1. `pi` 终端（个人端）——给开发者**
 
 在自己电脑上敲 `pi`，体验等同 Claude Code：聊天、写代码、在本机真实执行工具
 （建文件、跑命令），模型跑在集群上。`/model` 随时切换车道。接内部系统 = 在
 [client/pi/extensions/](client/pi/extensions/) 加一个 TypeScript 文件。
 
-**2. 个人网页（:7000，Pi 端）——给普通用户**
+**2. 个人网页（:7000，个人端）——给普通用户**
 
 `bin/client web` 在自己电脑上起一个聊天页：车道下拉 `auto` / `small` / `large` /
 `cloud`，每条回答标注「干活的模型 · 端到端延迟」。除 Python 外零依赖。
@@ -54,7 +54,7 @@ Anthropic Messages 格式同样支持（Claude 系客户端可直连）。整个
 
 ## 三、怎么使用
 
-### 推理端（每台设备一次）
+### 模型端（每台设备一次）
 
 前置：NVIDIA 卡（24GB 档已验证）并 `pip install vllm`，或 Mac/CPU 机（安装脚本
 自动编译 llama.cpp）；网关 venv 需要 Python 3.12+。
@@ -71,7 +71,7 @@ bin/cluster link-gpu "ssh -p 43314 root@gpu-host"        # 或经 SSH 接入远�
 ./cluster/test.sh all         # 分层全测: small|large|router|console|pi 也可单测
 ```
 
-### Pi 端（每个人一次）
+### 个人端（每个人一次）
 
 前置：Node 22+（装 Pi）。网页只需要 Python 3。
 
@@ -99,12 +99,12 @@ bin/client web --hub http://<Hub>:4000     # 个人网页 http://127.0.0.1:7000
 
 ## 组件架构
 
-推理端按设计文档的层分包，层间只通过 HTTP 和文件通信；Pi 端是独立的包，两者互不
+模型端按设计文档的层分包，层间只通过 HTTP 和文件通信；个人端是独立的包，两者互不
 import（详见 [docs/repo-layout.md](docs/repo-layout.md)）：
 
 | 包 | 层 | 用的现成件 | 我们写的部分 |
 |---|---|---|---|
-| `client/pi/`、`client/web/` | 接入层（Pi 端） | [Pi](https://pi.dev/) | Pi 接线与扩展；个人网页与本机代理 |
+| `client/pi/`、`client/web/` | 个人端 · harness | [Pi](https://pi.dev/) | Pi 接线与扩展；个人网页与本机代理 |
 | `cluster/router/` | 调度层 | [NeMo Switchyard](https://github.com/NVIDIA-NeMo/Switchyard) | 路由表生成；网关进程管理 |
 | `cluster/node/` | 资源层 | vLLM / llama.cpp | 硬件探测与定池；preset 解析；引擎进程 |
 | `cluster/control/` | 控制平面 | — | 节点注册表、健康、看门狗、分段自愈 |
@@ -126,7 +126,7 @@ import（详见 [docs/repo-layout.md](docs/repo-layout.md)）：
 | 故障切换 + 分段自愈 | 破坏性演练通过（杀 32B → 40s 切换 → 自动复活） |
 | Mac Hub + 远端 GPU 联动 | 真机验证；断链自动降级、重连恢复 |
 | 注册表驱动的热插拔 | `init` / `link-gpu` 已验证；`join` 已实现待双机验证 |
-| Pi 端（接线 + 个人网页） | 本机模式可用；Hub 托管零安装模式在路线图 |
+| 个人端（接线 + 个人网页） | 本机模式可用；Hub 托管零安装模式在路线图 |
 | 云端兜底走真实 API | 逻辑已通，真实 key 待插 |
 | 池内多副本负载均衡、自动发现、过载保护 | 路线图 |
 

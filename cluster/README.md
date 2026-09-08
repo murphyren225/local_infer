@@ -1,4 +1,4 @@
-# cluster — 推理端
+# cluster — 模型端
 
 Python package, one subpackage per layer of docs/design.md; layers talk through
 HTTP and files only. The Pi side (per-person client) lives in `client/` and is a
