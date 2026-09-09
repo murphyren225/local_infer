@@ -11,8 +11,8 @@
 
 | 系统 | 装在哪 | 目录 | 入口 |
 |---|---|---|---|
-| **个人端** | 每个人自己的机器，一人一套 | `client/` | `bin/client setup / web` |
-| **模型端** | 集群里的设备（GPU 机、Mac、大内存主机） | `cluster/` | `bin/cluster init / join / link-gpu` |
+| **个人端** | 每个人自己的机器，一人一套 | `client/` | `bin/install-client.sh URL`（一条命令：装 Pi、接线、起本机服务） |
+| **模型端** | 集群里的设备（GPU 机、Mac、大内存主机） | `cluster/` | `bin/install.sh`（一条命令：装依赖、下模型、开始服务） |
 
 ## 一、界面介绍
 
@@ -22,10 +22,13 @@
 （建文件、跑命令），模型跑在集群上。`/model` 随时切换车道。接内部系统 = 在
 [client/pi/extensions/](client/pi/extensions/) 加一个 TypeScript 文件。
 
-**2. 个人网页（:7000，个人端）——给普通用户**
+**2. 本机服务（:7000，个人端）——给普通用户和脚本**
 
-`bin/client web` 在自己电脑上起一个聊天页：车道下拉 `auto` / `small` / `large` /
-`cloud`，每条回答标注「干活的模型 · 端到端延迟」。除 Python 外零依赖。
+`bin/client up` 在自己电脑上起一个小服务：网页有两个页签——**Chat**（一次推理，
+本机什么都不跑）和 **Agent**（任务交给本机的 Pi，在你指定的目录里读写文件、跑命令，
+模型端只出答案）；脚本用 `client ask` / `client batch` 直接提交推理任务。车道下拉
+`auto` / `small` / `large` / `cloud`，每条回答标注「干活的模型 · 端到端延迟」。
+除 Python 外零依赖。
 
 **3. 集群管理台（:6006，Hub）——给管理员**
 
@@ -54,31 +57,36 @@ Anthropic Messages 格式同样支持（Claude 系客户端可直连）。整个
 
 ## 三、怎么使用
 
-### 模型端（每台设备一次）
+### 模型端：空白机器一条命令
 
-前置：NVIDIA 卡（24GB 档已验证）并 `pip install vllm`，或 Mac/CPU 机（安装脚本
-自动编译 llama.cpp）；网关 venv 需要 Python 3.12+。
+前置：装好驱动的 NVIDIA 卡（24GB 档已验证），或 Mac/CPU 机；Python 3.12+。
 
 ```bash
-git clone https://github.com/murphyren225/local_infer.git && cd local_infer
-bin/install.sh                # 服务 venv + Switchyard;(CPU 机)llama.cpp + 1.7B 模型;GPU 机打印 vLLM 步骤
-# 模型权重下载到本地(国内走 ModelScope):
-#   modelscope download --model Qwen/Qwen3-32B-AWQ  --local_dir /root/autodl-tmp/models/Qwen3-32B-AWQ
-#   modelscope download --model Qwen/Qwen3-1.7B-FP8 --local_dir /root/autodl-tmp/models/Qwen3-1.7B-FP8
-bin/cluster init              # 第一台 = Hub:探测硬件、选档、起车道、起网关与管理台(32B 加载约 4 分钟)
-bin/cluster join http://<Hub>:6006 --token JOIN-xxxx     # 局域网里的其他设备
-bin/cluster link-gpu "ssh -p 43314 root@gpu-host"        # 或经 SSH 接入远端 GPU
-./cluster/test.sh all         # 分层全测: small|large|router|console|pi 也可单测
+curl -fsSL https://raw.githubusercontent.com/murphyren225/local_infer/main/bin/bootstrap.sh | bash
 ```
 
-### 个人端（每个人一次）
+它克隆仓库并执行 `bin/install.sh`：服务 venv + Switchyard；GPU 机装 vLLM 并从
+ModelScope 下载 Qwen3-32B-AWQ 与 Qwen3-1.7B-FP8（`--hf` 走 Hugging Face），Mac 编译
+llama.cpp 并下载 1.7B GGUF；然后自动 `cluster init`——命令返回时机器已在服务
+（32B 加载约 4 分钟）。后续设备：`bin/install.sh --join http://<Hub>:6006 --token JOIN-xxxx`；
+远端 GPU 经 SSH：`bin/cluster link-gpu "ssh -p 43314 root@gpu-host"`。
+`./cluster/test.sh all` 做分层测试。
 
-前置：Node 22+（装 Pi）。网页只需要 Python 3。
+### 个人端：自己电脑一条命令
+
+前置：Node 22+（Pi 装进用户目录，不需要 sudo）。本机服务只需要 Python 3。
 
 ```bash
-bin/install-client.sh http://<Hub>:4000    # 装 Pi 并接到集群
-pi                                         # 终端 agent,默认车道 auto
-bin/client web --hub http://<Hub>:4000     # 个人网页 http://127.0.0.1:7000
+curl -fsSL https://raw.githubusercontent.com/murphyren225/local_infer/main/bin/bootstrap.sh | bash -s -- personal http://<Hub>:4000
+```
+
+然后：
+
+```bash
+bin/client pi                                  # Pi harness:工具在本机执行,模型在集群上
+open http://127.0.0.1:7000                     # 个人网页:Chat(只推理) / Agent(本机 Pi 干活)
+bin/client ask "翻译成英文:今天很忙" --lane small  # 一次推理,不经 harness
+bin/client batch prompts.txt -c 4 -o out.jsonl # 一批推理任务并发提交
 ```
 
 - 管理台：http://<Hub>:6006（AutoDL 点「自定义服务」；其他环境

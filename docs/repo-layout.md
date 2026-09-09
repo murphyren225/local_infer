@@ -23,7 +23,7 @@
 | `cluster/inference/presets/` | 第三部分 §4.2–4.4、§5 | 每个「模型家族 × 硬件档位」一个 `.env`：模型路径、对外名、端口、引擎参数 | 校准数据是资产，独立成文件便于逐个审阅和替换；`node/presets.py` 只负责解析 |
 | `cluster/control/` | 第一部分 §4 热插拔、§6 故障处理；第三部分 §6 | `registry.py` 注册表；`health.py`；`watchdog.py` 循环；`heal.py` 分段重启 | 控制平面不在数据路径上，独立成包，与三层互不 import |
 | `cluster/util/` | — | `procs.py`：拉起进程、pid 文件、HTTP 健康等待 | 各层共用的机械操作，无业务含义 |
-| `bin/install.sh` | 第三部分 §1.3 | 装依赖：服务 venv 与 Switchyard、CPU 机的 llama.cpp 与 1.7B 模型；GPU 机打印 vLLM 步骤 | 每台设备跑一次，幂等；之后才是 `cluster init/join` |
+| `bin/install.sh` | 第一部分 §1.3 | 空白机器一条命令：服务 venv 与 Switchyard；GPU 机装 vLLM 并下载两个模型，CPU 机编译 llama.cpp 并下载 1.7B；随后自动 `cluster init`（或 `--join`） | 每台设备跑一次，幂等 |
 | `cluster/cli.py`、`bin/cluster` | 第三部分 §6.3 | `init / join / link-gpu / status / stop / regen` | 只做编排，不含策略；`bin/cluster` 是 `python3 -m cluster` 的一行包装 |
 | `cluster/test.sh`、`cluster/ask.sh` | 第三部分 §6.3、§8 | HTTP 冒烟测试；一行派活 | 走公开接口，不依赖包内部 |
 | `tests/` | — | 控制平面与路由生成的单元测试，无 GPU 可跑 | 纯函数（`routes.render`、`health.mode`、`probe.choose_preset`）的测试 |
@@ -36,8 +36,10 @@
 | `client/pi/extensions/` | 第三部分 §2.1 | Pi 扩展（`*.ts`），每个内部系统一个文件 | 「往 Pi 里加能力」的唯一位置，不改 `setup.py` |
 | `client/web/index.html` | 第三部分 §2.3 | 个人网页前端：对话、车道选择、每条回答标注执行模型与延迟 | 只有聊天，没有集群管理；管理在 `cluster/access/console/` |
 | `client/serve.py` | 第三部分 §2.3 | 本机小服务（标准库）：托管网页，把 `/v1/*` 代理到网关 | 员工机器上除 Python 外零依赖；代理是为了免网关 CORS |
-| `client/cli.py`、`bin/client` | 第三部分 §2.1 | `setup --hub` / `web --hub` / `status` | 一人一套的全部操作 |
-| `bin/install-client.sh` | 第三部分 §1.3 | 装 Pi（npm），然后 `client setup` | 员工机器跑一次 |
+| `client/gateway.py` | 第二部分 §1 | 个人端对模型端的全部认识：一次 chat、列路由、读提示词文件 | `ask`/`batch`/本机服务共用，标准库 |
+| `client/cli.py`、`bin/client` | 第三部分 §2.1 | `setup` / `up` / `down` / `pi` / `ask` / `batch` / `status` / `web` | 一人一套的全部操作；hub 地址记在 `~/.cluster-client/config.json` |
+| `bin/install-client.sh` | 第一部分 §1.3 | 装 Pi（全局目录不可写时装到 `~/.cluster-client/npm`），接线，拉起本机服务 | 员工机器跑一次 |
+| `bin/bootstrap.sh` | 第一部分 §1.3 | curl 一行式：克隆仓库后执行对应安装包（`model` 或 `personal URL`） | 两端共用的入口 |
 
 ## 运行时目录（不入库）
 
@@ -45,7 +47,8 @@
 |---|---|---|
 | `state/` | `nodes.json` 注册表、`routes.yaml` 路由表、`cluster_mode` 模式字、`join_token`、`preset` | 控制平面与 CLI；是第三部分 §6.1「文件契约」的全部载体 |
 | `logs/` | 各进程日志与 pid | `util/procs.py` |
-| `~/.homed/` | 模型权重、服务 venv、本机编译的 llama.cpp | 安装步骤 |
+| `~/.homed/` | 模型端：模型权重（AutoDL 上软链到 `/root/autodl-tmp/models`）、服务 venv（含 vLLM）、本机编译的 llama.cpp | `bin/install.sh` |
+| `~/.cluster-client/` | 个人端：`config.json`（hub 地址）、本机服务 pid/日志、用户目录安装的 Pi | `bin/client`、`bin/install-client.sh` |
 
 `state/` 与 `logs/` 分开，是因为前者是**接口**（另一个模块会读），后者只是**产物**。
 

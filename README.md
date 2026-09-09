@@ -12,8 +12,8 @@ on the other side, and the only contract between them is one gateway URL:
 
 | System | Where it runs | Directory | Entrypoint |
 |---|---|---|---|
-| **Personal side (harness)** | every person's own machine, one per person | `client/` | `bin/client setup / web` |
-| **Model side (Switchyard + inference)** | the devices in the cluster (GPU box, Mac, big-RAM host) | `cluster/` | `bin/cluster init / join / link-gpu` |
+| **Personal side (harness)** | every person's own machine, one per person | `client/` | `bin/install-client.sh URL` (one command: Pi, wiring, local service) |
+| **Model side (Switchyard + inference)** | the devices in the cluster (GPU box, Mac, big-RAM host) | `cluster/` | `bin/install.sh` (one command: install, download, serve) |
 
 ## 1. Interfaces
 
@@ -22,9 +22,12 @@ your own cluster, with real tool execution on your machine. `/model` switches la
 tools for internal systems are added as one TypeScript file each under
 [client/pi/extensions/](client/pi/extensions/).
 
-**Personal web UI (:7000, client side)** — `bin/client web` starts a chat page on your
-own machine: lane picker (`auto`/`small`/`large`/`cloud`), every answer annotated with
-the model that did the work and the end-to-end latency. Zero dependencies beyond Python.
+**Personal local service (:7000, personal side)** — `bin/client up` starts a small service
+on your own machine: a web page with two tabs — **Chat** (one inference call on the model
+side, nothing runs here) and **Agent** (the task goes to Pi on this machine, which reads
+and writes files in a working directory you choose; the model side only answers) — plus
+`client ask` / `client batch` for inference jobs from scripts. Every answer is annotated
+with the model that did the work and the end-to-end latency. Zero dependencies beyond Python.
 
 **Cluster admin console (:6006, Hub)** — for admins: device cards with hardware
 profiles and health, the router's current policy, the **escalation event stream** (the
@@ -51,29 +54,36 @@ Anthropic Messages format is also accepted. That is the entire API surface.
 
 ## 3. How to use
 
-### Cluster side (once per device)
+### Model side — one command on a blank device
 
-Prereqs: NVIDIA GPU (24GB tier validated) with `pip install vllm`, or a Mac/CPU box
-(llama.cpp is built by the installer); Python 3.12+ for the gateway venv.
+Prereqs: an NVIDIA GPU (24GB tier validated) with drivers, or a Mac/CPU box; Python 3.12+.
 
 ```bash
-git clone https://github.com/murphyren225/local_infer.git && cd local_infer
-bin/install.sh                # service venv + Switchyard; (CPU box) llama.cpp + 1.7B model
-# download weights (ModelScope inside China, HF elsewhere) to local dirs, then:
-bin/cluster init              # first device = Hub: probe hardware, pick preset, start lanes, gateway, console
-bin/cluster join http://<hub>:6006 --token JOIN-xxxx     # any further device on the LAN
-bin/cluster link-gpu "ssh -p 43314 root@gpu-host"        # or adopt a remote GPU over SSH
-./cluster/test.sh all         # per-component tests: small|large|router|console|pi
+curl -fsSL https://raw.githubusercontent.com/murphyren225/local_infer/main/bin/bootstrap.sh | bash
 ```
 
-### Client side (once per person)
+That clones the repo and runs `bin/install.sh`: service venv + Switchyard; on a GPU box
+vLLM plus the Qwen3-32B-AWQ and Qwen3-1.7B-FP8 weights (ModelScope; `--hf` for Hugging
+Face), on a Mac llama.cpp plus the 1.7B GGUF; then `cluster init` — the device is serving
+when the command returns. Further devices: `bin/install.sh --join http://<hub>:6006 --token JOIN-xxxx`;
+a remote GPU over SSH: `bin/cluster link-gpu "ssh -p 43314 root@gpu-host"`.
+`./cluster/test.sh all` runs the per-component tests.
 
-Prereqs: Node 22+ (for Pi). Python 3 only for the optional web page.
+### Personal side — one command on your own machine
+
+Prereqs: Node 22+ (Pi installs into your home dir, no sudo). Python 3 for the local service.
 
 ```bash
-bin/install-client.sh http://<hub>:4000    # installs Pi and wires it to the cluster
-pi                                         # terminal agent, default lane auto
-bin/client web --hub http://<hub>:4000     # personal web UI at http://127.0.0.1:7000
+curl -fsSL https://raw.githubusercontent.com/murphyren225/local_infer/main/bin/bootstrap.sh | bash -s -- personal http://<hub>:4000
+```
+
+Then:
+
+```bash
+bin/client pi                                  # Pi harness: tools run here, models run on the cluster
+open http://127.0.0.1:7000                     # personal web UI: Chat (inference only) / Agent (Pi on this machine)
+bin/client ask "summarize this" --lane small   # one inference call, no harness
+bin/client batch prompts.txt -c 4 -o out.jsonl # a batch of inference jobs, concurrent
 ```
 
 - Admin console: http://<hub>:6006 (on AutoDL click "Custom Service"; elsewhere

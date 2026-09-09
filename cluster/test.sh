@@ -52,11 +52,12 @@ t_router() {
 }
 
 t_pi() {
+  PI="$HOME/.cluster-client/npm/bin/pi"; [ -x "$PI" ] || PI=pi
   echo "== Pi 单发指令 (pi -p, 走 home/auto) =="
-  pi --provider home --model auto -p "用一句话说明你运行在什么模型栈上"
+  "$PI" --provider home --model auto -p "用一句话说明你运行在什么模型栈上"
   echo "== Pi 工具调用 (真实写文件) =="
   rm -f /tmp/pi_e2e.txt
-  (cd /tmp && pi --provider home --model auto -p "创建文件 /tmp/pi_e2e.txt,内容是 e2e-ok" >/dev/null 2>&1) || true
+  (cd /tmp && "$PI" --provider home --model auto -p "创建文件 /tmp/pi_e2e.txt,内容是 e2e-ok" >/dev/null 2>&1) || true
   if [ "$(cat /tmp/pi_e2e.txt 2>/dev/null)" = "e2e-ok" ]; then
     echo "  PASS: pi 通过本地模型调工具写入了 /tmp/pi_e2e.txt"
   else

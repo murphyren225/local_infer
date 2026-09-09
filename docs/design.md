@@ -27,7 +27,12 @@
 - 界面：终端 `pi`，或一个只做对话的个人网页。
 
 个人端不做模型选择。它只声明一个策略名（`auto`/`small`/`large`/`cloud`），
-派给哪台机器、哪个模型由模型端决定。自研部分是 Pi 的接线和个人网页，约 300 行。
+派给哪台机器、哪个模型由模型端决定。
+
+个人端有两种用法，对应本机服务的两个入口：走 harness（Pi 在本机执行工具，
+模型端只出答案），或者不走 harness 直接提交推理任务（一条 `ask`，或一批
+`batch`，本机不执行任何东西）。自研部分是 Pi 的接线、本机服务和个人网页，
+约 500 行。
 
 ### 1.2 模型端
 
@@ -43,6 +48,16 @@
 
 部署形态是企业内网里的若干台异构设备，每台装一次；其中一台是 Hub，运行网关、
 控制平面和管理台。
+
+### 1.3 两套安装包
+
+| 安装包 | 目标机器 | 一条命令做完的事 |
+|---|---|---|
+| 模型端 `bin/install.sh` | 空白的 GPU 机或 Mac 节点 | 装服务 venv 与 Switchyard；GPU 机装 vLLM 并下载 32B-AWQ + 1.7B-FP8 权重，Mac 编译 llama.cpp 并下载 1.7B GGUF；然后直接 `cluster init`（第一台）或 `--join` 加入已有 Hub。装完即在服务 |
+| 个人端 `bin/install-client.sh URL` | 每个人自己的机器 | 装 Pi（全局目录不可写时装到用户目录，不需要 sudo）；接线；拉起本机服务。装完即可 `client pi`、开网页、`client ask` |
+
+两者都有 `bin/bootstrap.sh` 的 curl 一行式入口（克隆仓库再执行对应安装包）。
+安装是幂等的，重跑只补缺的部分。
 
 ### 术语
 
@@ -245,7 +260,7 @@ HTTP。没有共享内存、共享文件或进程内调用跨过任何边界；�
 |---|---|---|
 | `HUB:4000` | 网关（主 API） | 所有客户端 |
 | `HUB:6006` | 集群管理台（网页 + 其配套 API、节点登记） | 管理员、加入的节点 |
-| 本机 `:7000` | 个人网页（个人端，可选） | 本人的浏览器 |
+| 本机 `:7000` | 个人端本机服务：个人网页、网关代理、harness 任务接口（仅 127.0.0.1） | 本人的浏览器与脚本 |
 | 节点 `:8001` / `:8002` | 推理引擎（内部接口） | 仅网关调用，客户端不应直连 |
 
 ---
@@ -415,7 +430,18 @@ degraded-small-large | degraded-small-cloud | degraded-all-cloud | dead`。
 
 ---
 
-## 4. 节点内部接口（客户端勿直连，列出仅为完整性）
+## 4. 个人端本机接口（`127.0.0.1:7000`，仅本机）
+
+不属于模型端契约，列在这里是因为脚本会用到。
+
+| 接口 | 语义 |
+|---|---|
+| `GET /` | 个人网页 |
+| `GET /api/config` | `{"gateway": "<模型端网关>", "agent": <本机是否装了 Pi>}` |
+| `* /v1/*` | 原样代理到模型端网关；POST 响应附加 `_client.latency_ms` |
+| `POST /api/agent` | 在本机跑一次 harness 任务：请求 `{"task", "lane", "cwd"}`，同步返回 `{"output", "exit", "cwd", "latency_ms"}`。Pi 以 `-p` 单次模式执行，工具作用于 `cwd` |
+
+## 5. 节点内部接口（客户端勿直连，列出仅为完整性）
 
 | 接口 | 说明 |
 |---|---|
@@ -465,9 +491,12 @@ degraded-small-large | degraded-small-cloud | degraded-all-cloud | dead`。
 
 | 命令 | 语义 |
 |---|---|
-| `client setup --hub URL` | 接线；可重复执行，只覆盖 `home` provider |
-| `client web --hub URL [--port 7000]` | 起个人网页（§2.3） |
-| `client status` | 显示当前接线与已装扩展 |
+| `client setup --hub URL` | 接线；可重复执行，只覆盖 `home` provider；记住 URL，之后的命令可省略 `--hub` |
+| `client up [--port 7000]` / `down` | 后台起停本机服务（§2.3）；pid 与日志在 `~/.cluster-client/` |
+| `client pi [参数]` | 打开 Pi harness（走 `home/auto`） |
+| `client ask "…" [--lane auto]` | 一次推理调用，不经 harness，本机不执行任何东西 |
+| `client batch FILE [--lane] [-c 4] [-o out.jsonl]` | 一批提示词并发提交（jsonl 的 `prompt` 字段或每行一条），逐行输出结果，单条失败不中断 |
+| `client status` | 接线、本机服务、Pi、网关可达性 |
 
 ### 2.2 provider 配置规范（`~/.pi/agent/models.json`）
 
@@ -503,10 +532,12 @@ degraded-small-large | degraded-small-cloud | degraded-all-cloud | dead`。
 
 ### 2.3 两个网页：个人前端与集群管理台
 
-个人网页（个人端，`client/web/`，`:7000`，每人本机一份）：只有对话。车道选择
-`auto/small/large/cloud`，每条回答标注实际执行模型与端到端延迟。由 `client/serve.py`
-托管，一个标准库 HTTP 服务，把 `/v1/*` 原样代理到网关，这样网页不需要网关开
-CORS，也不需要在员工机器上装任何依赖。不含上传、不含集群状态。
+个人网页（个人端，`client/web/`，`:7000`，每人本机一份）：两个页签。Chat 是一次
+推理调用，本机不执行任何东西；Agent 把任务交给本机的 Pi（`-p` 单次模式）在指定
+工作目录里执行，模型端只出答案。车道选择 `auto/small/large/cloud`，每条回答标注
+实际执行模型与端到端延迟。由 `client/serve.py` 托管，一个标准库 HTTP 服务：把
+`/v1/*` 原样代理到网关（网页不需要网关开 CORS），并提供 `POST /api/agent`
+（第二部分 §4）。不含上传、不含集群状态。
 
 集群管理台（模型端，`cluster/access/console/`，Hub `:6006`，全集群一份）：设备
 卡片（在线状态、硬件档案、最近一次解码指标）、路由策略说明（随 `cluster_mode`
@@ -826,7 +857,8 @@ stateDiagram-v2
 | `stop` | 按 pid 全停（看门狗、控制台、网关、隧道、本地车道） | — | 清 pid | — |
 | `regen` | 强制按当前健康重生成路由表并重启网关 | — | — | — |
 
-单 GPU 机整机部署即 `init`（自动选 `qwen3-24gb` preset，先起强池再起弱池）。
+单 GPU 机整机部署即 `init`（自动选 `qwen3-24gb` preset，先起强池再起弱池）；
+`bin/install.sh` 装完自动执行它，所以空白机器一条命令即在服务。
 HTTP 冒烟 `cluster/test.sh [small|large|router|console|pi|failover|all]`；其中 `pi`
 一项需要本机已执行过 `bin/client setup`。
 

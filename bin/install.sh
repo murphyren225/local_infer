@@ -1,19 +1,37 @@
 #!/usr/bin/env bash
-# Install prerequisites for a cluster node (idempotent). Run once per device, then bin/cluster init|join.
-# This is the inference side only; user machines run bin/install-client.sh instead.
+# Model side, one command on a blank device: install everything, download models, start serving.
 #
-#   bin/install.sh            # everything this device needs
-#   bin/install.sh --no-model # skip the weak-lane model download
+#   bin/install.sh                # install + download + `cluster init` (this device becomes the Hub)
+#   bin/install.sh --join URL --token T   # install + download + join an existing Hub
+#   bin/install.sh --no-start     # install + download only
+#   bin/install.sh --no-model     # skip model downloads
+#   bin/install.sh --hf           # download from Hugging Face instead of ModelScope
 #
 # What it does, by layer (docs/design.md):
 #   调度层  Python >= 3.12 venv at ~/.homed/venv with nemo-switchyard + console deps
-#   资源层  NVIDIA box: prints the vLLM + model steps (environment-specific, not automated here)
+#   资源层  NVIDIA box: vLLM into the same venv + Qwen3-32B-AWQ / Qwen3-1.7B-FP8 weights
 #           CPU/Mac box: llama.cpp binary (download, or build when the OS is too old) + 1.7B GGUF
+# Personal machines run bin/install-client.sh instead.
 set -euo pipefail
+START=init; MODEL=1; SRC=modelscope; JOIN_URL=""; JOIN_TOKEN=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --no-start) START="" ;;
+    --no-model) MODEL=0 ;;
+    --hf) SRC=hf ;;
+    --join) START=join; JOIN_URL="$2"; shift ;;
+    --token) JOIN_TOKEN="$2"; shift ;;
+    *) echo "unknown flag $1"; exit 1 ;;
+  esac; shift
+done
 HOMED="$HOME/.homed"
 VENV="$HOMED/venv"
 MODELS="$HOMED/models"
-mkdir -p "$HOMED" "$MODELS" "$HOMED/bin" "$HOMED/pkg"
+mkdir -p "$HOMED" "$HOMED/bin" "$HOMED/pkg"
+# AutoDL and similar: the system disk is small, weights go to the data disk.
+if [ -d /root/autodl-tmp ] && [ ! -e "$MODELS" ]; then mkdir -p /root/autodl-tmp/models && ln -s /root/autodl-tmp/models "$MODELS"; fi
+mkdir -p "$MODELS"
+REPO="$(cd "$(dirname "$0")/.." && pwd)"
 say() { printf '\n== %s\n' "$*"; }
 ok()  { printf '  ✓ %s\n' "$*"; }
 
@@ -31,12 +49,26 @@ ok "switchyard $("$VENV/bin/pip" show nemo-switchyard | awk '/^Version/{print $2
 
 # ---- 资源层 ---------------------------------------------------------------
 if command -v nvidia-smi >/dev/null; then
-  say "NVIDIA node: vLLM lane (not automated — environment specific)"
-  echo "  1. pip install vllm            (in the Python env you will run the engine from)"
-  echo "  2. download weights to a local dir, e.g. (ModelScope inside China):"
-  echo "       modelscope download --model Qwen/Qwen3-32B-AWQ  --local_dir $MODELS/Qwen3-32B-AWQ"
-  echo "       modelscope download --model Qwen/Qwen3-1.7B-FP8 --local_dir $MODELS/Qwen3-1.7B-FP8"
-  echo "  3. set LARGE_MODEL_PATH / SMALL_MODEL_PATH if not using $MODELS, then: bin/cluster init"
+  say "NVIDIA node: vLLM into $VENV"
+  if "$VENV/bin/python" -c 'import vllm' 2>/dev/null; then
+    ok "vllm $("$VENV/bin/pip" show vllm | awk '/^Version/{print $2}') already installed"
+  else
+    "$VENV/bin/pip" install -q vllm && ok "vllm $("$VENV/bin/pip" show vllm | awk '/^Version/{print $2}')"
+  fi
+  if [ "$MODEL" = 1 ]; then
+    say "models: Qwen3-32B-AWQ + Qwen3-1.7B-FP8 → $MODELS ($SRC, resumable)"
+    for M in Qwen3-32B-AWQ Qwen3-1.7B-FP8; do
+      if [ -f "$MODELS/$M/config.json" ] && ls "$MODELS/$M"/*.safetensors >/dev/null 2>&1; then ok "$M present"; continue; fi
+      if [ "$SRC" = hf ]; then
+        "$VENV/bin/pip" install -q huggingface_hub
+        "$VENV/bin/python" -c "from huggingface_hub import snapshot_download as d; d('Qwen/$M', local_dir='$MODELS/$M')"
+      else
+        "$VENV/bin/pip" install -q modelscope
+        "$VENV/bin/modelscope" download --model "Qwen/$M" --local_dir "$MODELS/$M" >/dev/null
+      fi
+      ok "$M downloaded"
+    done
+  fi
 else
   say "CPU/Mac node: llama.cpp"
   LLAMA="$HOMED/pkg/src/build/bin/llama-server"
@@ -65,7 +97,7 @@ else
       ok "llama-server built"
     fi
   fi
-  if [ "${1:-}" != "--no-model" ]; then
+  if [ "$MODEL" = 1 ]; then
     say "weak-lane model: Qwen3-1.7B Q8_0 (ModelScope, resumable)"
     F="$MODELS/Qwen3-1.7B-Q8_0.gguf"; URL="https://modelscope.cn/models/Qwen/Qwen3-1.7B-GGUF/resolve/master/Qwen3-1.7B-Q8_0.gguf"
     for _ in $(seq 1 40); do
@@ -77,4 +109,8 @@ else
   fi
 fi
 
-say "done. Next: bin/cluster init   (first device)   or   bin/cluster join <hub> --token <t>"
+case "$START" in
+  init) say "starting: cluster init"; exec "$REPO/bin/cluster" init ;;
+  join) say "starting: cluster join $JOIN_URL"; exec "$REPO/bin/cluster" join "$JOIN_URL" --token "$JOIN_TOKEN" ;;
+  *) say "installed. Start with: bin/cluster init   (first device)   or   bin/cluster join <hub> --token <t>" ;;
+esac

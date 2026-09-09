@@ -15,7 +15,9 @@ say "Pi CLI"
 if command -v pi >/dev/null; then
   ok "pi $(pi --version 2>/dev/null | head -1) already installed"
 elif command -v npm >/dev/null; then
-  npm install -g --ignore-scripts @earendil-works/pi-coding-agent >/dev/null 2>&1 && ok "pi installed" \
+  # global prefix is often root-owned (Homebrew/pkg installs); fall back to a per-user prefix, no sudo
+  if [ -w "$(npm config get prefix)/lib/node_modules" ] 2>/dev/null; then PFX=""; else PFX="--prefix $HOME/.cluster-client/npm"; fi
+  npm install -g --ignore-scripts $PFX @earendil-works/pi-coding-agent >/dev/null 2>&1 && ok "pi installed${PFX:+ (user prefix ~/.cluster-client/npm)}" \
     || { echo "  ✗ npm install failed; install Node >= 22 and retry"; exit 1; }
 else
   echo "  ✗ npm not found: install Node >= 22 (https://nodejs.org) and rerun"; exit 1
@@ -23,7 +25,9 @@ fi
 
 say "wire Pi to $HUB"
 "$(dirname "$0")/client" setup --hub "$HUB"
+"$(dirname "$0")/client" up
 
 say "done"
-echo "  pi                                   # terminal agent, default home/auto"
-echo "  bin/client web --hub $HUB      # personal web UI at http://127.0.0.1:7000"
+echo "  bin/client pi                        # terminal agent, default home/auto"
+echo "  http://127.0.0.1:7000                # personal web UI (Chat = inference, Agent = pi on this machine)"
+echo "  bin/client ask \"…\" --lane auto   bin/client batch prompts.txt   # inference jobs without the harness"

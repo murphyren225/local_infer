@@ -22,9 +22,19 @@ def _llama_server() -> str:
     return found
 
 
+def _vllm() -> str:
+    cand = Path(os.environ.get("HOMED_VENV", Path.home() / ".homed" / "venv")) / "bin" / "vllm"
+    if cand.exists():
+        return str(cand)
+    found = shutil.which("vllm")
+    if not found:
+        raise RuntimeError("vllm not found (bin/install.sh installs it into ~/.homed/venv)")
+    return found
+
+
 def command(lane: Lane) -> list[str]:
     if lane.engine == "vllm":
-        return ["vllm", "serve", lane.model_path, "--served-model-name", lane.name,
+        return [_vllm(), "serve", lane.model_path, "--served-model-name", lane.name,
                 "--port", str(lane.port), *lane.args]
     if lane.engine == "llama.cpp":
         return [_llama_server(), "-m", lane.model_path, "-a", lane.name,
