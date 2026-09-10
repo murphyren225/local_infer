@@ -41,7 +41,12 @@ PY=""
 for c in python3.13 python3.12 python3; do
   if command -v "$c" >/dev/null && "$c" -c 'import sys; sys.exit(0 if sys.version_info >= (3,12) else 1)'; then PY=$c; break; fi
 done
-[ -n "$PY" ] || { echo "  ✗ need Python >= 3.12 (brew install python@3.12 / apt install python3.12)"; exit 1; }
+if [ -z "$PY" ]; then
+  echo "  - no Python >= 3.12 on this machine; installing one with uv (user-local, no sudo)"
+  command -v uv >/dev/null || curl -LsSf https://astral.sh/uv/install.sh | sh >/dev/null 2>&1
+  export PATH="$HOME/.local/bin:$PATH"
+  uv python install 3.12 >/dev/null 2>&1 && PY=$(uv python find 3.12) || { echo "  ✗ could not install Python 3.12"; exit 1; }
+fi
 [ -x "$VENV/bin/python" ] || "$PY" -m venv "$VENV"
 "$VENV/bin/pip" install -q --upgrade pip
 "$VENV/bin/pip" install -q nemo-switchyard fastapi uvicorn httpx python-multipart pyyaml

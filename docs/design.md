@@ -122,6 +122,9 @@ flowchart TD
 3. 网关决定去向，转发时把 `model` 改成目标节点的真实模型名。顺序：显式指定
    （`small`/`large`/`cloud`）直通；会话已升级的走强池；其余交判定器。判定器
    看的是对话轨迹，不是单条消息的难度；连续两次升级结论才生效，升级后不回落。
+   「会话」由请求头 `x-switchyard-session-id` 标识，个人端的本机服务给每个请求
+   都带上（网页每次新对话一个；Pi 等不带头的客户端按对话首条消息推导）。不经
+   个人端、也不带这个头的第三方客户端，每轮都从零判定，不会锁定到强池。
 4. 目标节点的引擎解码，返回带 `usage` 的响应。
 5. 响应原路返回。`model` 字段是实际执行者，`auto` 不出现在响应里。
 6. 响应里若带 `tool_calls`，个人端在本机执行工具，把结果追加进 `messages`
@@ -147,8 +150,10 @@ flowchart TD
 
 ## 4. 设备热插拔
 
-加一台设备，等于给某个池加一个模型副本。已有设备的配置不变，服务不中断，
-下一个请求起生效。撤一台设备不需要任何操作。当前只覆盖三类硬件。
+加一台设备，等于给某个池加一个模型副本。已有设备的配置不变，服务不中断。
+当前阶段副本的作用是故障转移：每个池只有一个在役节点，其余为备份，在役节点
+失效时下一个请求起切换；同池多副本分摊流量要在池前加负载均衡层（见本节末
+尾与路线图）。撤一台设备不需要任何操作。当前只覆盖三类硬件。
 
 加入：
 
@@ -166,7 +171,8 @@ flowchart TD
 | 128GB 统一内存主机 | 长上下文池 | 规划 |
 
 不在当前范围内：同池多台同型设备的负载分摊（Switchyard 每池只指向一个地址，
-需要在池前加负载均衡层）；在途请求迁移到新设备（引擎不支持 KV 跨机迁移）；
+需要在池前加负载均衡层，候选是每池一个 nginx `least_conn` 或 sgl-router，
+路由表生成器同时生成它的配置）；在途请求迁移到新设备（引擎不支持 KV 跨机迁移）；
 自动发现和网页批准（现在用口令）。
 
 实现状态：`init`、`link-gpu`、看门狗自愈已在真机验证；`join`（节点自探测、
@@ -437,9 +443,13 @@ degraded-small-large | degraded-small-cloud | degraded-all-cloud | dead`。
 | 接口 | 语义 |
 |---|---|
 | `GET /` | 个人网页 |
-| `GET /api/config` | `{"gateway": "<模型端网关>", "agent": <本机是否装了 Pi>}` |
-| `* /v1/*` | 原样代理到模型端网关；POST 响应附加 `_client.latency_ms` |
-| `POST /api/agent` | 在本机跑一次 harness 任务：请求 `{"task", "lane", "cwd"}`，同步返回 `{"output", "exit", "cwd", "latency_ms"}`。Pi 以 `-p` 单次模式执行，工具作用于 `cwd` |
+| `GET /api/config` | `{"gateway": "<模型端网关>", "agent": <本机是否装了 Pi>, "token": "<本次启动的口令>"}`。不带 CORS 头，其他源的网页读不到 |
+| `* /v1/*` | 代理到模型端网关。补 `x-switchyard-session-id`：客户端带了就原样转，没带就按对话首条消息（含 system）哈希推导。POST 响应附加 `_client.latency_ms` 与 `_client.session` |
+| `POST /api/agent` | 在本机跑一次 harness 任务：请求 `{"task", "lane", "cwd"}`，同步返回 `{"output", "exit", "cwd", "latency_ms"}`。Pi 以 `-p` 单次模式执行，工具作用于 `cwd`。必须带 `X-Client-Token`（来自 `/api/config`）和 `Content-Type: application/json` |
+
+访问控制：`Host` 必须是回环地址（防 DNS 重绑定）；带 `Origin` 的请求只接受本服务
+自己的源。命令行客户端不带 `Origin`，直接通过。这样浏览器里打开的其他网站无法
+驱动 `/api/agent`，也无法经 `/v1` 消耗集群。
 
 ## 5. 节点内部接口（客户端勿直连，列出仅为完整性）
 
@@ -479,6 +489,9 @@ degraded-small-large | degraded-small-cloud | degraded-all-cloud | dead`。
 不采用。
 
 个人端是独立的一套（`client/`），装在每个人自己的机器上，与模型端不共享代码。
+Pi 的 provider 指向本机服务（`127.0.0.1:7000/v1`）而不是直接指向网关：本机服务
+是个人端唯一的出口，负责给每个请求补会话标识（第二部分 §4）；`client pi`
+会先确保本机服务在跑。
 安装与接线：`bin/install-client.sh http://<Hub>:4000`，等价于装 Pi 再执行
 `bin/client setup --hub …`。后者写三样东西：`~/.pi/agent/models.json`（§2.2）、
 `~/.pi/agent/settings.json`（默认 provider/model 为 `home/auto`；压缩阈值
@@ -607,7 +620,7 @@ routes:
     judge:
       model: qwen3-1.7b-gguf
       base_url: http://127.0.0.1:8002/v1
-      confirmations: 1                # ≥1;连续 N 次升级结论才生效
+      confirmations: 2                # ≥1;连续 N 次升级结论才生效
       disable_reasoning: true         # 判定器禁思考,保证 JSON 结论可解析
       max_completion_tokens: 512
     fallback_target_on_evict: strong  # 只能取 strong|weak;会话被 LRU 逐出后的去向
@@ -962,7 +975,9 @@ profiling。处置：看门狗自动降级并自愈，无需人工；复发则�
 
 ### 8.3 安全边界
 
-内网部署默认无鉴权；对外暴露必须在 4000/6006 前置反向代理鉴权。云端
+内网部署默认无鉴权；对外暴露必须在 4000/6006 前置反向代理鉴权。个人端本机
+服务只绑回环地址，且按第二部分 §4 校验 `Host`/`Origin`，`/api/agent` 另要口令；
+它在用户机器上执行的一切以用户身份进行。云端
 key 只存 Hub 的 `.env`。上传文件不落盘，仅注入当次请求；对话不持久化。
 除显式 `cloud` 路由与降级模式外，数据不出内网。云端用量无预算护栏，
 为已知缺口。

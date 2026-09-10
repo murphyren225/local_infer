@@ -8,10 +8,12 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
+SESSION_HEADER = "x-switchyard-session-id"
 
-def _post(url: str, body: dict, timeout: int = 600) -> dict:
+
+def _post(url: str, body: dict, headers: dict | None = None, timeout: int = 600) -> dict:
     req = urllib.request.Request(url, data=json.dumps(body).encode(), method="POST",
-                                 headers={"Content-Type": "application/json"})
+                                 headers={"Content-Type": "application/json", **(headers or {})})
     with urllib.request.urlopen(req, timeout=timeout) as r:
         return json.load(r)
 
@@ -35,11 +37,14 @@ def models(hub: str) -> list[str]:
         return [m["id"] for m in json.load(r).get("data", [])]
 
 
-def chat(hub: str, lane: str, prompt: str, max_tokens: int = 1024) -> dict:
-    """One completion. Returns content, the model that actually answered, latency, tokens."""
+def chat(hub: str, lane: str, prompt: str, max_tokens: int = 1024, session: str | None = None) -> dict:
+    """One completion. Returns content, the model that actually answered, latency, tokens.
+    `session` groups turns for the model side's escalation stickiness; one-shot calls pass
+    a fresh id so unrelated prompts never share a latch."""
     t0 = time.monotonic()
     d = _post(hub.rstrip("/") + "/v1/chat/completions",
-              {"model": lane, "messages": [{"role": "user", "content": prompt}], "max_tokens": max_tokens})
+              {"model": lane, "messages": [{"role": "user", "content": prompt}], "max_tokens": max_tokens},
+              headers={SESSION_HEADER: session} if session else None)
     if "choices" not in d:
         raise RuntimeError(json.dumps(d.get("error", d))[:300])
     return {"content": d["choices"][0]["message"].get("content") or "",

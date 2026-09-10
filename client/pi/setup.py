@@ -1,10 +1,11 @@
 """Pi harness wiring (client side). Writes three things under ~/.pi/agent/:
 
-  models.json   provider "home" → the cluster gateway; one entry per route
+  models.json   provider "home" → the local service (client/serve.py), which forwards to the
+                cluster gateway and attaches the session id; one entry per route
   settings.json defaults (provider/model) and compaction sized for our context windows
   extensions/   our tool extensions, copied from client/pi/extensions/
 
-Input is only the gateway URL. Nothing here knows how the cluster is built.
+Input is only the URL Pi should talk to. Nothing here knows how the cluster is built.
 """
 from __future__ import annotations
 

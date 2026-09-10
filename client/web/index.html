@@ -38,6 +38,7 @@
   <h1>Cluster Client</h1>
   <span class="gw" id="gw">connecting…</span>
   <div class="tabs">
+    <button id="newchat" title="Start a new conversation (new session on the model side)">New chat</button>
     <button id="tab-chat" class="on" title="One inference call on the model side; nothing runs on this machine">Chat</button>
     <button id="tab-agent" title="Pi harness on this machine: reads/writes files, runs commands; the model side only answers">Agent</button>
   </div>
@@ -57,9 +58,11 @@
 </div>
 <script>
 const $ = id => document.getElementById(id);
-let history = [], mode = "chat", agentAvailable = false;
+let history = [], mode = "chat", agentAvailable = false, token = "", session = newSession();
+function newSession() { return (crypto.randomUUID ? crypto.randomUUID() : String(Math.random())).replace(/-/g, "").slice(0, 16); }
+$("newchat").onclick = () => { history = []; session = newSession(); $("msgs").innerHTML = ""; };
 fetch("/api/config").then(r => r.json()).then(c => {
-  agentAvailable = !!c.agent;
+  agentAvailable = !!c.agent; token = c.token || "";
   $("gw").textContent = "model side " + c.gateway + (agentAvailable ? " · pi ready" : " · pi not installed (Agent tab disabled)");
 }).catch(() => $("gw").textContent = "local service not reachable");
 
@@ -87,7 +90,7 @@ async function send() {
     add("user", text, "agent");
     const bot = add("bot", "… agent running on this machine", "agent");
     try {
-      const r = await fetch("/api/agent", { method: "POST", headers: { "Content-Type": "application/json" },
+      const r = await fetch("/api/agent", { method: "POST", headers: { "Content-Type": "application/json", "X-Client-Token": token },
         body: JSON.stringify({ task: text, lane: $("model").value, cwd: $("cwd").value }) });
       const d = await r.json();
       bot.textContent = d.error ? "❌ " + d.error : (d.output || "(no output)");
@@ -97,7 +100,7 @@ async function send() {
     add("user", text); history.push({ role: "user", content: text });
     const bot = add("bot", "… generating");
     try {
-      const r = await fetch("/v1/chat/completions", { method: "POST", headers: { "Content-Type": "application/json" },
+      const r = await fetch("/v1/chat/completions", { method: "POST", headers: { "Content-Type": "application/json", "x-switchyard-session-id": session },
         body: JSON.stringify({ model: $("model").value, messages: history.slice(-8), max_tokens: 1024 }) });
       const d = await r.json();
       if (!d.choices) { bot.textContent = "❌ " + JSON.stringify(d.error || d).slice(0, 200); }
@@ -105,7 +108,7 @@ async function send() {
         const ans = d.choices[0].message.content || "(empty)";
         bot.textContent = ans; history.push({ role: "assistant", content: ans });
         const ms = (d._client || {}).latency_ms, tok = (d.usage || {}).completion_tokens;
-        meta(`served by <b>${d.model}</b>` + (ms ? ` · ${(ms/1000).toFixed(1)}s` : "") + (tok ? ` · ${tok} tok` : ""));
+        meta(`served by <b>${d.model}</b>` + (ms ? ` · ${(ms/1000).toFixed(1)}s` : "") + (tok ? ` · ${tok} tok` : "") + ` · session ${session.slice(0,6)}`);
       }
     } catch (e) { bot.textContent = "❌ " + e; }
   }

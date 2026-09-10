@@ -94,7 +94,7 @@ def render(a: Assessment, cloud: Cloud) -> tuple[str, str]:
             f"    weak:\n      model: {w.model}\n      base_url: {w.base_url}\n"
             f"    strong:\n      model: {s.model}\n      base_url: {s.base_url}\n"
             f"    judge:\n      model: {w.model}\n      base_url: {w.base_url}\n"
-            "      confirmations: 1\n      disable_reasoning: true\n      max_completion_tokens: 512\n"
+            "      confirmations: 2\n      disable_reasoning: true\n      max_completion_tokens: 512\n"
             "    fallback_target_on_evict: strong\n"
         )
     else:
