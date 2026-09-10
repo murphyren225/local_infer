@@ -137,7 +137,10 @@ def cmd_pi(args) -> int:
 
 
 def cmd_ask(args) -> int:
-    r = gateway.chat(_hub(args), args.lane, args.prompt, max_tokens=args.max_tokens, session=uuid.uuid4().hex[:16])
+    try:
+        r = gateway.chat(_hub(args), args.lane, args.prompt, max_tokens=args.max_tokens, session=uuid.uuid4().hex[:16])
+    except (OSError, RuntimeError) as exc:
+        sys.exit(f"  model side unreachable or refused: {exc}")
     print(r["content"])
     print(f"\n  [{r['model']} · {r['latency_ms'] / 1000:.1f}s · {r['tokens']} tok]", file=sys.stderr)
     return 0
