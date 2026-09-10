@@ -1,3 +1,8 @@
 #!/usr/bin/env bash
-# Thin launcher: run the homed package from the repo root with the system python.
-cd "$(dirname "$0")/.." && exec python3 -m cluster "$@"
+# Thin launcher: run the cluster package from the repo root. Prefers the service venv's
+# Python (always present after bin/install.sh) so it works from cron, systemd and bare
+# ssh sessions where the system Python may not be on PATH.
+cd "$(dirname "$0")/.." || exit 1
+PY="${HOMED_VENV:-$HOME/.homed/venv}/bin/python"
+[ -x "$PY" ] || PY=python3
+exec "$PY" -m cluster "$@"

@@ -120,3 +120,12 @@ def test_preset_cpu_parses():
 ])
 def test_choose_preset(kind, vram, expected):
     assert probe.choose_preset(probe.Hardware(kind, "x", vram_mib=vram)) == expected
+
+
+def test_preset_args_keep_json_quotes():
+    """vLLM's --default-chat-template-kwargs needs a JSON token; shlex must not eat the quotes."""
+    from cluster.node import presets
+    lanes = presets.load("qwen3-24gb")
+    for lane in lanes:
+        i = lane.args.index("--default-chat-template-kwargs")
+        assert lane.args[i + 1] == '{"enable_thinking":false}'
