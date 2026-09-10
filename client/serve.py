@@ -159,20 +159,36 @@ class Handler(BaseHTTPRequestHandler):
         req = urllib.request.Request(GATEWAY + self.path, data=body, method=method, headers=headers)
         start = time.monotonic()
         try:
-            with urllib.request.urlopen(req, timeout=600) as r:
-                data, code = r.read(), r.status
+            upstream = urllib.request.urlopen(req, timeout=600)
         except urllib.error.HTTPError as e:
-            data, code = e.read(), e.code
+            return self._send(e.code, e.read(), e.headers.get("Content-Type") or "application/json")
         except (urllib.error.URLError, OSError) as e:
-            data, code = json.dumps({"error": f"gateway unreachable: {e}"}).encode(), 502
-        if method == "POST" and code == 200:
+            return self._json(502, {"error": f"gateway unreachable: {e}"})
+        with upstream:
+            ctype = upstream.headers.get("Content-Type") or "application/json"
+            if ctype.startswith("text/event-stream"):
+                # streaming: relay chunks as they arrive so Pi/SDK clients see tokens live
+                self.send_response(upstream.status)
+                self.send_header("Content-Type", ctype)
+                self.send_header("Cache-Control", "no-cache")
+                self.send_header("Connection", "close")
+                self.end_headers()
+                try:
+                    while chunk := upstream.read1(4096):
+                        self.wfile.write(chunk)
+                        self.wfile.flush()
+                except (BrokenPipeError, ConnectionResetError):
+                    pass
+                return
+            data, code = upstream.read(), upstream.status
+        if method == "POST" and code == 200 and ctype.startswith("application/json"):
             try:
                 obj = json.loads(data)
                 obj["_client"] = {"latency_ms": round((time.monotonic() - start) * 1000), "session": session}
                 data = json.dumps(obj, ensure_ascii=False).encode()
             except ValueError:
-                pass  # streaming or non-JSON body: pass through untouched
-        self._send(code, data)
+                pass
+        self._send(code, data, ctype)
 
 
 def run(port: int = 7000) -> None:
