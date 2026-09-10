@@ -53,6 +53,9 @@ def start(lane: Lane, wait_tries: int = 240) -> bool:
     if lane.engine == "llama.cpp" and not Path(lane.model_path).exists():
         return False
     env = {"PYTORCH_CUDA_ALLOC_CONF": os.environ.get("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")}
+    if lane.engine == "vllm":
+        # vLLM's JIT (flashinfer) shells out to `ninja`, which lives in the venv's bin
+        env["PATH"] = str(Path(_vllm()).parent) + os.pathsep + os.environ.get("PATH", "")
     procs.spawn(proc_name(lane), command(lane), env=env)
     return procs.wait_http(lane.health_url, wait_tries)
 
