@@ -739,6 +739,12 @@ vLLM 与 SGLang 的取舍按任务负载：
 | `--default-chat-template-kwargs` | `{"enable_thinking":false}` | Qwen3 默认开思考，会耗尽 max_tokens 导致空正文 |
 | `--enforce-eager` | — | 放弃 CUDA graph 换 1–2GiB 显存 |
 
+进程环境：`vllm` 取服务 venv（`~/.homed/venv/bin/vllm`），子进程的 `PATH` 前置该
+venv 的 `bin`——vLLM 的 JIT（flashinfer）会直接调用 `ninja`，不在 PATH 上就在引擎
+初始化阶段失败。preset 文件里的 JSON 参数值写成 `{\"enable_thinking\":false}`（转义
+引号），因为参数串经 `shlex` 切分，裸引号会被吃掉，vLLM 收到 `{enable_thinking:false}`
+直接拒绝启动。这两条都是 2026-09-10 空白机器一键安装时发现的。
+
 启动顺序：同卡双模型时大模型先启动。32B 冷启动瞬时峰值约
 20.5GiB（AWQ 权重重排临时缓冲），需要整卡空闲；小模型驻留时原地重启大
 模型必然 OOM，自愈流程因此采用分段重启（§8.2 案例 2）。
