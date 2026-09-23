@@ -50,16 +50,16 @@ Switchyard 没有自己的模型。它的决策核心是**判定器（judge / cl
 | B | **LiteLLM Proxy** | Switchyard 作为 LiteLLM 插件（官方支持） | 得到企业功能，策略仍是 Switchyard 的 |
 | C | **LiteLLM Proxy** | 自写 `CustomRoutingStrategy`：先改写，再判定 | 改写和路由在一个插件里，策略完全自主 |
 
-推荐 **C，判定部分先复用 Switchyard 的嵌入式库（libsy）**，等有了自己的评测集再换成自训分类器。LiteLLM 提供的、我们不用再造的：虚拟 key、按人/队限额、云端预算、会话粘性（"pin every request of a conversation to the deployment that served its first request"）、重试与冷却、上下文窗口预检、用量记录。
+推荐 **C，判定环节用 Jev（§1.3），无 key 时退回 Switchyard 的嵌入式库（libsy）做本地判定**。LiteLLM 提供的、我们不用再造的：虚拟 key、按人/队限额、云端预算、会话粘性（"pin every request of a conversation to the deployment that served its first request"）、重试与冷却、上下文窗口预检、用量记录。
 
 插件的输入输出：
 
 ```
 输入  messages, x-task-type(可空), x-session-id
-步骤  1. 任务分类（规则 + 小模型），补全 x-task-type
-      2. Prompt Rewriter：按任务类型选一条 GEPA 优化过的改写提示词，
-         用弱池小模型把用户输入改写成更短、更结构化的版本（可跳过）
-      3. Switcher：判定 p_solve → 弱 / 强 / 云
+步骤  1. 问 Jev（一次调用，多个问题并行）：任务类型？需要改写吗？弱 / 强 / 云？
+         预计输出长度档位？ → 补全 x-task-type
+      2. Prompt Rewriter：Jev 说要改时，用弱池小模型按该任务类型的模板改写（可跳过）
+      3. 按 Jev 的选择定目标模型；置信度低于阈值时按保守规则（走强）
 输出  目标模型名 + 改写后的 messages + 头部透传给池内分发
 ```
 
