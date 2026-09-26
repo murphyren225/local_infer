@@ -235,4 +235,6 @@ Pi / 本机服务 :7000 ──▶ Switchyard(fork) :4000 ──▶ decider :4100
 - **证据**：`tests/e2e_chain.py`（`E2E_HUB=http://127.0.0.1:4000 E2E_PAIR_RPC=""`）PASS；Mac 网关 RL 轨迹 `served_tier = weak / strong / strong`；Mac PAIR 账本最后四条 `qwen3:1.7b ollama → 4090`、`qwen3-1.7b lmstudio → 4090`；桌面端 Jobs 列表显示 "Ran on autodl-4090"。4090 独有的 `qwen3:8b` 经 Mac 的 Ollama 代理也能直接到 4090。
 - **Switchyard fork 顺手修的**：`reasoning_effort: none` 原被上游 normalizer 改成 `high`，Ollama 的 Qwen3 因此一直在思考；现在 `none` 是合法值。
 
+**逐环节测试**：`tests/links.py`，七个环节各一个函数，`python3 tests/links.py N` 单测一环，`python3 tests/links.py all` 七环依次跑完再跑整链 `tests/e2e_chain.py`。环节：1 引擎直连（4090 SGLang、4090 Ollama、Mac Ollama）；2 PAIR 看见 4090（两个代理的清单里有 4090 的模型）；3 PAIR 选硬件（4090 独有模型落在 4090，账本为证）；4 决策器（概率归一、任务类型、写日志）；5 Switchyard 模型路由（small/large 经 PAIR 到引擎）；6 Switchyard auto（判两次、锁强池、RL 轨迹 weak→strong→strong）；7 个人端本机服务（镜像 hub、透传 `x-task-type`）。端点全部是 `LINK_*` 环境变量，默认值就是本节拓扑。2026-09-27 全部 PASS。
+
 未做：反向隧道（4090 看见 Mac，目前不需要）；第二个 LM 家族节点（Mac 上可用 llama-server 顶 LM 槽位，让强池也有硬件选择）；正式跨网组网方案替代隧道。
