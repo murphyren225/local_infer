@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+# Mac → AutoDL 4090 tunnel for the two-machine topology (docs/pipeline-design.md §9).
+# Reconnects by itself when the ssh session drops. Run it in the background and forget it:
+#
+#   bin/tunnel-4090 &                 # or: nohup bin/tunnel-4090 > logs/tunnel.log 2>&1 &
+#   bin/tunnel-4090 --stop
+#
+# Local port → 4090 port
+#   14318–14323 → same     PAIR node-info / cluster / engine manager (manual-node probing)
+#   1234        → 30000    SGLang, seen by PAIR as the manual node's LM-slot engine
+#   11434       → 11435    the 4090's Ollama engine (manual-node Ollama probe)
+#   17998       → 17999    pairctl JSON-RPC on the 4090
+#   14000       → 4000     Switchyard on the 4090 (the older single-box setup)
+#   14100       → 4100     decider on the 4090
+#   30000       → 30000    SGLang, direct (link-1 test)
+TARGET=${TUNNEL_TARGET:-root@connect.westb.seetacloud.com}
+PORT=${TUNNEL_PORT:-43314}
+FWD="-L 14318:127.0.0.1:14318 -L 14319:127.0.0.1:14319 -L 14320:127.0.0.1:14320 -L 14321:127.0.0.1:14321 -L 14322:127.0.0.1:14322 -L 14323:127.0.0.1:14323 \
+     -L 1234:127.0.0.1:30000 -L 11434:127.0.0.1:11435 -L 17998:127.0.0.1:17999 -L 14000:127.0.0.1:4000 -L 14100:127.0.0.1:4100 -L 30000:127.0.0.1:30000"
+
+if [ "${1:-}" = "--stop" ]; then
+  pkill -f "tunnel-409[0]"; pkill -f "ssh -p $PORT .*-N .*$TARGET"; echo "tunnel stopped"; exit 0
+fi
+while true; do
+  ssh -p "$PORT" -o BatchMode=yes -o ExitOnForwardFailure=yes -o ServerAliveInterval=15 -o ServerAliveCountMax=3 \
+      -o ConnectTimeout=15 -N $FWD "$TARGET"
+  echo "$(date '+%F %T') tunnel exited ($?), reconnecting in 5s"
+  sleep 5
+done
