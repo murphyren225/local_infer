@@ -52,6 +52,22 @@ fi
 "$VENV/bin/pip" install -q nemo-switchyard fastapi uvicorn httpx python-multipart pyyaml
 ok "switchyard $("$VENV/bin/pip" show nemo-switchyard | awk '/^Version/{print $2}') in $VENV"
 
+# ---- Switchyard fork overlay (decision provider) -------------------------------
+# The fork (murphyren225/switchyard-decision, branch decision-provider) changes only the
+# pure-Python package; the Rust extension comes from the wheel above. Overlay the fork's
+# switchyard/ onto site-packages. Source: SWITCHYARD_FORK = local checkout path or git URL.
+FORK="${SWITCHYARD_FORK:-$REPO/vendor/switchyard-decision}"
+if [ ! -d "$FORK/switchyard" ] && [ -n "${SWITCHYARD_FORK_URL:-}" ]; then
+  git clone -q --branch decision-provider --depth 1 "$SWITCHYARD_FORK_URL" "$FORK" 2>/dev/null || true
+fi
+if [ -d "$FORK/switchyard" ]; then
+  SP=$("$VENV/bin/python" -c 'import switchyard, os; print(os.path.dirname(switchyard.__file__))')
+  [ -d "$SP.upstream" ] || cp -R "$SP" "$SP.upstream"
+  rsync -a --delete --exclude __pycache__ "$FORK/switchyard/" "$SP/" && ok "switchyard fork overlaid from $FORK"
+else
+  echo "  - switchyard fork not found (set SWITCHYARD_FORK or SWITCHYARD_FORK_URL); upstream judge only, no judge.provider"
+fi
+
 # ---- 资源层 ---------------------------------------------------------------
 if command -v nvidia-smi >/dev/null; then
   say "NVIDIA node: vLLM into $VENV"

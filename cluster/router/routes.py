@@ -29,7 +29,34 @@ class Cloud:
     api_key: str = ""
 
 
-def cloud_from_env() -> Cloud:
+@dataclass
+class Judge:
+    """Who answers "escalate?" for the auto route (Switchyard fork: judge.provider).
+
+    http  → the decider service (rules / anyjev / jev / rl backends), the default when
+            DECIDER_URL is set; Switchyard fails open to weak if it is unreachable.
+    llm   → upstream behaviour: the weak model itself judges the trajectory.
+    """
+    provider: str = "llm"
+    url: str = ""
+    min_turn: int = 1
+    confirmations: int = 2
+    threshold: float = 0.5
+    explore_epsilon: float = 0.0
+
+
+def judge_from_env() -> Judge:
+    env = _env()
+    url = env.get("DECIDER_URL", "")
+    provider = env.get("JUDGE_PROVIDER", "http" if url else "llm")
+    return Judge(provider=provider, url=url,
+                 min_turn=int(env.get("JUDGE_MIN_TURN", "1")),
+                 confirmations=int(env.get("JUDGE_CONFIRMATIONS", "2")),
+                 threshold=float(env.get("JUDGE_THRESHOLD", "0.5")),
+                 explore_epsilon=float(env.get("JUDGE_EXPLORE_EPSILON", "0")))
+
+
+def _env() -> dict[str, str]:
     env = dict(os.environ)
     dotenv = ROOT / ".env"
     if dotenv.exists():
@@ -37,6 +64,11 @@ def cloud_from_env() -> Cloud:
             if "=" in line and not line.strip().startswith("#"):
                 k, v = line.split("=", 1)
                 env.setdefault(k.strip(), v.strip())
+    return env
+
+
+def cloud_from_env() -> Cloud:
+    env = _env()
     key = env.get("TOGETHER_API_KEY", "")
     if not key:
         return Cloud(False)
@@ -47,7 +79,10 @@ def cloud_from_env() -> Cloud:
 
 
 def _target(n: Node) -> Target:
-    return Target(n.model, n.base_url)
+    # PAIR_PROXY_URL: hand replica selection to a PAIR (fork) OpenAI proxy on this host —
+    # Switchyard still names the model, PAIR picks the node that holds it.
+    proxy = _env().get("PAIR_PROXY_URL", "")
+    return Target(n.model, proxy.rstrip("/") if proxy else n.base_url)
 
 
 def resolve(a: Assessment, cloud: Cloud) -> dict[str, Target | None]:
@@ -79,8 +114,19 @@ def _model_route(name: str, t: Target) -> str:
             f"    base_url: {t.base_url}\n    api_key: {t.api_key}\n")
 
 
-def render(a: Assessment, cloud: Cloud) -> tuple[str, str]:
+def _judge_block(w: Target, j: Judge) -> str:
+    if j.provider == "http":
+        return (f"    judge:\n      provider: http\n      url: {j.url}\n"
+                f"      min_turn: {j.min_turn}\n      confirmations: {j.confirmations}\n"
+                f"      escalate_threshold: {j.threshold}\n      explore_epsilon: {j.explore_epsilon}\n")
+    return (f"    judge:\n      model: {w.model}\n      base_url: {w.base_url}\n"
+            f"      min_turn: {j.min_turn}\n      confirmations: {j.confirmations}\n"
+            "      disable_reasoning: true\n      max_completion_tokens: 512\n")
+
+
+def render(a: Assessment, cloud: Cloud, judge: Judge | None = None) -> tuple[str, str]:
     """Return (yaml_text, mode). Raises if nothing can serve."""
+    judge = judge or judge_from_env()
     r = resolve(a, cloud)
     m = compute_mode(a, cloud.enabled)
     if r["strong"] is None or r["weak"] is None:
@@ -93,9 +139,8 @@ def render(a: Assessment, cloud: Cloud) -> tuple[str, str]:
             "  auto:\n    type: escalation_router\n"
             f"    weak:\n      model: {w.model}\n      base_url: {w.base_url}\n"
             f"    strong:\n      model: {s.model}\n      base_url: {s.base_url}\n"
-            f"    judge:\n      model: {w.model}\n      base_url: {w.base_url}\n"
-            "      confirmations: 2\n      disable_reasoning: true\n      max_completion_tokens: 512\n"
-            "    fallback_target_on_evict: strong\n"
+            + _judge_block(w, judge)
+            + "    fallback_target_on_evict: strong\n"
         )
     else:
         out.append(_model_route("auto", r["strong"]))

@@ -91,8 +91,28 @@ def start_watchdog(heal: bool) -> None:
 
 # ---------------------------------------------------------------- commands
 
+def start_decider() -> None:
+    """Local decision service for the auto route (Switchyard judge.provider=http).
+    Skipped when DECIDER_URL points elsewhere; backend from DECIDER_BACKEND (rules)."""
+    env = routes._env()
+    url = env.get("DECIDER_URL", "")
+    if url and "127.0.0.1" not in url and "localhost" not in url:
+        return
+    port = int(env.get("DECIDER_PORT", "4100"))
+    if procs.healthy(f"http://127.0.0.1:{port}/health"):
+        return
+    procs.spawn("decider", [sys.executable, "-m", "decider", "--backend", env.get("DECIDER_BACKEND", "rules"),
+                             "--port", str(port)], env={"DECIDER_LOG": str(paths.LOGS / "decisions.jsonl")})
+    if procs.wait_http(f"http://127.0.0.1:{port}/health", 20):
+        os.environ.setdefault("DECIDER_URL", f"http://127.0.0.1:{port}")
+        ok(f"decider ({env.get('DECIDER_BACKEND', 'rules')}) on :{port}")
+    else:
+        fail("decider did not start; auto route falls back to the LLM judge")
+
+
 def cmd_init(args) -> int:
     paths.ensure_dirs()
+    start_decider()
     hw = probe.probe()
     preset_name = args.preset or probe.choose_preset(hw)
     print(f"== init: {hw.label} → preset {preset_name}")
@@ -192,12 +212,14 @@ def cmd_status(args) -> int:
     (ok if gateway.healthy() else fail)(f"gateway :{paths.GATEWAY_PORT}")
     (ok if procs.healthy(f'http://127.0.0.1:{paths.CONSOLE_PORT}/api/status') else fail)(f"console :{paths.CONSOLE_PORT}")
     (ok if procs.alive('watchdog') else fail)("watchdog")
+    dport = routes._env().get("DECIDER_PORT", "4100")
+    (ok if procs.healthy(f"http://127.0.0.1:{dport}/health") else fail)(f"decider :{dport} (judge provider for auto)")
     say(f"mode: {routes.current_mode()}")
     return 0
 
 
 def cmd_stop(args) -> int:
-    for name in ("watchdog", "console", gateway.NAME, "tunnel", "engine-strong", "engine-weak"):
+    for name in ("watchdog", "console", gateway.NAME, "decider", "tunnel", "engine-strong", "engine-weak"):
         if procs.stop(name):
             say(f"stopped {name}")
     return 0

@@ -22,6 +22,7 @@
 | `cluster/node/` | 第一部分 §3 硬件与池；第三部分 §4 | `probe.py` 硬件探测与定池规则；`presets.py` 读 preset；`engine.py` 起 vLLM / llama.cpp | 一台设备成为节点需要的全部逻辑。定池规则和引擎启动放同一目录，因为它们都只在节点本机执行 |
 | `cluster/inference/presets/` | 第三部分 §4.2–4.4、§5 | 每个「模型家族 × 硬件档位」一个 `.env`：模型路径、对外名、端口、引擎参数 | 校准数据是资产，独立成文件便于逐个审阅和替换；`node/presets.py` 只负责解析 |
 | `cluster/control/` | 第一部分 §4 热插拔、§6 故障处理；第三部分 §6 | `registry.py` 注册表；`health.py`；`watchdog.py` 循环；`heal.py` 分段重启 | 控制平面不在数据路径上，独立成包，与三层互不 import |
+| `decider/` | 第三部分 §3.3 | 决策服务：`POST /decide`，rules / jev / anyjev 后端，写 `logs/decisions.jsonl` | Switchyard（fork）`judge.provider: http` 的对端；换后端不动网关 |
 | `cluster/util/` | — | `procs.py`：拉起进程、pid 文件、HTTP 健康等待 | 各层共用的机械操作，无业务含义 |
 | `bin/install.sh` | 第一部分 §1.3 | 空白机器一条命令：服务 venv 与 Switchyard；GPU 机装 vLLM 并下载两个模型，CPU 机编译 llama.cpp 并下载 1.7B；随后自动 `cluster init`（或 `--join`） | 每台设备跑一次，幂等 |
 | `cluster/cli.py`、`bin/cluster` | 第三部分 §6.3 | `init / join / link-gpu / status / stop / regen` | 只做编排，不含策略；`bin/cluster` 是 `python3 -m cluster` 的一行包装 |

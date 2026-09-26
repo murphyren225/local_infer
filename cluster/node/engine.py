@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import os
 import shutil
+import sys
 from pathlib import Path
 
 from ..util import procs
@@ -32,10 +33,23 @@ def _vllm() -> str:
     return found
 
 
+def _sglang_python() -> str:
+    """Interpreter with sglang installed: SGLANG_VENV, else the service venv, else the current one."""
+    for cand in (Path(os.environ.get("SGLANG_VENV", "")) / "bin" / "python" if os.environ.get("SGLANG_VENV") else None,
+                 Path(os.environ.get("HOMED_VENV", Path.home() / ".homed" / "venv")) / "bin" / "python"):
+        if cand and cand.exists():
+            return str(cand)
+    return sys.executable
+
+
 def command(lane: Lane) -> list[str]:
     if lane.engine == "vllm":
         return [_vllm(), "serve", lane.model_path, "--served-model-name", lane.name,
                 "--port", str(lane.port), *lane.args]
+    if lane.engine == "sglang":
+        # served name = lane.name so Switchyard/PAIR route by the same string on every engine
+        return [_sglang_python(), "-m", "sglang.launch_server", "--model-path", lane.model_path,
+                "--served-model-name", lane.name, "--host", "127.0.0.1", "--port", str(lane.port), *lane.args]
     if lane.engine == "llama.cpp":
         return [_llama_server(), "-m", lane.model_path, "-a", lane.name,
                 "--host", "127.0.0.1", "--port", str(lane.port), *lane.args]
@@ -56,6 +70,8 @@ def start(lane: Lane, wait_tries: int = 240) -> bool:
     if lane.engine == "vllm":
         # vLLM's JIT (flashinfer) shells out to `ninja`, which lives in the venv's bin
         env["PATH"] = str(Path(_vllm()).parent) + os.pathsep + os.environ.get("PATH", "")
+    if lane.engine == "sglang":
+        env["PATH"] = str(Path(_sglang_python()).parent) + os.pathsep + os.environ.get("PATH", "")
     procs.spawn(proc_name(lane), command(lane), env=env)
     return procs.wait_http(lane.health_url, wait_tries)
 

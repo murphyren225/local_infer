@@ -189,6 +189,23 @@ PAIR 原生是"一个引擎一个进程一个模型"。第一步下：
 6. 端到端：Pi → Switchyard → PAIR → SGLang，重放 20 条轨迹，记 token/延迟/去向。
 7. 投机解码：preset 加 EAGLE-3 参数，对比接受长度和 tok/s。
 
-## 7. 待你确认的问题
+## 7. 已确认的决定（2026-09-26）
 
-见对话。
+- levi 暂不用；SGLang 节点先用 AutoDL 4090（隧道方案）。
+- PAIR 第一步只改 manifest，一节点一模型；先用两台放**同一个最小模型**看硬件选择。
+- 决策器接口：完整概率 `route{weak,strong,cloud}` + confidence + task_type。
+- 代码放**私有**新仓库：`murphyren225/switchyard-decision`（分支 `decision-provider`）、`murphyren225/pair-sglang`（分支 `sglang-engine`）。
+
+## 8. 进度
+
+| 步骤 | 状态 |
+|---|---|
+| Switchyard fork：`DecisionProvider`（llm/rules/http/jev）、`x-task-type`、ε 探索、决策写入 RL 轨迹、YAML 键 `judge.provider/url/min_turn/escalate_threshold/explore_epsilon` | **完成**，上游 87 个相关测试 + 12 个新测试通过；Mac 上以 `provider: http` 真跑：turn 1–2 问决策器、turn 2 锁定强池、turn 3 不再问 |
+| 决策器服务 `decider/`（rules / jev / anyjev 后端，`logs/decisions.jsonl`） | **完成**（rules 真跑；anyjev 等 GPU） |
+| local_infer 接线：`routes.py` 生成 `judge.provider: http`（`DECIDER_URL`）、`PAIR_PROXY_URL` 把 target 指向 PAIR 代理；`cluster init` 拉起 decider；`engine.py` 加 `sglang`；preset `qwen3-24gb-sglang.env` | **完成**（单元测试；SGLang 真机待 4090 开机） |
+| PAIR fork 第一步：`lmstudio.json` 改为启动 SGLang | **完成**（manifest 已提交；真机待 4090） |
+| 4090 上：装 SGLang、PAIR 代理路由到它、Switchyard target 指向 PAIR 代理、端到端重放 | 待 4090 开机 |
+| 投机解码 preset（EAGLE-3） | 待上一步 |
+
+Switchyard fork 的安装方式（Intel Mac 没有 Rust 工具链，不重编 wheel）：装官方 0.2.0 wheel 取得 `switchyard_rust` 扩展，再把 fork 的 `switchyard/` 纯 Python 包覆盖到 site-packages（`bin/install.sh` 后续加这一步）。
+

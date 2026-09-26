@@ -129,3 +129,31 @@ def test_preset_args_keep_json_quotes():
     for lane in lanes:
         i = lane.args.index("--default-chat-template-kwargs")
         assert lane.args[i + 1] == '{"enable_thinking":false}'
+
+
+def test_sglang_engine_command_and_preset():
+    from cluster.node import engine, presets
+    lanes = {l.pool: l for l in presets.load("qwen3-24gb-sglang")}
+    assert lanes["strong"].engine == "sglang" and lanes["weak"].engine == "sglang"
+    cmd = engine.command(lanes["strong"])
+    assert cmd[1:3] == ["-m", "sglang.launch_server"]
+    assert "--served-model-name" in cmd and cmd[cmd.index("--served-model-name") + 1] == "qwen3-32b-awq"
+    assert "--port" in cmd and cmd[cmd.index("--port") + 1] == "8001"
+
+
+def test_routes_judge_http_and_pair_proxy(monkeypatch):
+    from cluster.control.health import Assessment
+    from cluster.control.registry import Node
+    from cluster.router import routes
+    hw = "nvidia 24GB"
+    a = Assessment(healthy={"strong": [Node("s", "strong", "qwen3-32b-awq", "http://10.0.0.5:8001/v1", hw, "sglang", False)],
+                            "weak": [Node("w", "weak", "qwen3-1.7b-fp8", "http://10.0.0.5:8002/v1", hw, "sglang", False)]}, dead=[])
+    monkeypatch.setenv("DECIDER_URL", "http://127.0.0.1:4100")
+    monkeypatch.setenv("PAIR_PROXY_URL", "http://127.0.0.1:1234/v1")
+    text, mode = routes.render(a, routes.Cloud(False))
+    assert mode == "normal"
+    assert "provider: http" in text and "url: http://127.0.0.1:4100" in text and "min_turn: 1" in text
+    assert "base_url: http://127.0.0.1:1234/v1" in text and "10.0.0.5" not in text
+    monkeypatch.delenv("DECIDER_URL"); monkeypatch.delenv("PAIR_PROXY_URL")
+    text2, _ = routes.render(a, routes.Cloud(False))
+    assert "provider:" not in text2 and "10.0.0.5:8002" in text2
