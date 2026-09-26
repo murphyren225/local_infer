@@ -20,6 +20,8 @@ def state(tmp_path, monkeypatch):
     monkeypatch.setattr(registry, "TOKEN_FILE", tmp_path / "join_token")
     monkeypatch.setattr(routes, "ROUTES_FILE", tmp_path / "routes.yaml")
     monkeypatch.setattr(routes, "MODE_FILE", tmp_path / "cluster_mode")
+    monkeypatch.setattr(routes, "ROOT", tmp_path)                            # no real .env
+    monkeypatch.setattr(routes, "DECIDER_FILE", tmp_path / "decider_url")   # no real decider
     monkeypatch.setattr(registry, "ensure_dirs", lambda: None)
     monkeypatch.setattr(routes, "ensure_dirs", lambda: None)
     return tmp_path
@@ -141,7 +143,7 @@ def test_sglang_engine_command_and_preset():
     assert "--port" in cmd and cmd[cmd.index("--port") + 1] == "8001"
 
 
-def test_routes_judge_http_and_pair_proxy(monkeypatch):
+def test_routes_judge_http_and_pair_proxy(state, monkeypatch):
     from cluster.control.health import Assessment
     from cluster.control.registry import Node
     from cluster.router import routes
@@ -157,3 +159,30 @@ def test_routes_judge_http_and_pair_proxy(monkeypatch):
     monkeypatch.delenv("DECIDER_URL"); monkeypatch.delenv("PAIR_PROXY_URL")
     text2, _ = routes.render(a, routes.Cloud(False))
     assert "provider:" not in text2 and "10.0.0.5:8002" in text2
+
+
+def test_pair_mode_nodes(monkeypatch):
+    """PAIR_PROXY_URL: no local engine; pools map onto models PAIR advertises; watchdog must not heal them."""
+    from cluster import cli
+    from cluster.node import probe
+    hw = probe.Hardware(kind="cpu", label="Intel Mac · CPU")
+    nodes = cli.pair_nodes("http://127.0.0.1:11434/v1/", hw, env={}, models=["qwen3:1.7b", "qwen3:8b"])
+    assert [(n.pool, n.model) for n in nodes] == [("strong", "qwen3:1.7b"), ("weak", "qwen3:1.7b")]
+    assert all(n.engine == "pair" and not n.local and n.base_url == "http://127.0.0.1:11434/v1" for n in nodes)
+    assert nodes[0].health_url == "http://127.0.0.1:11434/v1/models"
+    nodes = cli.pair_nodes("http://127.0.0.1:11434/v1", hw, env={"PAIR_STRONG_MODEL": "qwen3:8b"},
+                           models=["qwen3:1.7b", "qwen3:8b"])
+    assert nodes[0].model == "qwen3:8b" and nodes[1].model == "qwen3:1.7b"
+    import pytest
+    with pytest.raises(RuntimeError):
+        cli.pair_nodes("http://127.0.0.1:11434/v1", hw, env={"PAIR_WEAK_MODEL": "nope"}, models=["qwen3:1.7b"])
+
+
+def test_judge_from_decider_file(state, monkeypatch):
+    """`cluster init` records the decider URL; regen and the watchdog (other processes) must find it."""
+    from cluster.router import routes
+    monkeypatch.delenv("DECIDER_URL", raising=False)
+    assert routes.judge_from_env().provider == "llm"
+    routes.DECIDER_FILE.write_text("http://127.0.0.1:4100")
+    j = routes.judge_from_env()
+    assert j.provider == "http" and j.url == "http://127.0.0.1:4100"

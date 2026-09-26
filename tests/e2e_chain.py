@@ -41,14 +41,21 @@ def chat(model, messages, task_type=None, session=None, max_tokens=80):
         h["x-task-type"] = task_type
     if session:
         h["x-switchyard-session-id"] = session
+    # Thinking off on every engine we route to: SGLang/vLLM read chat_template_kwargs,
+    # Ollama's OpenAI endpoint reads reasoning_effort. Unknown keys are ignored by the other.
     body = {"model": model, "messages": messages, "max_tokens": max_tokens,
-            "chat_template_kwargs": {"enable_thinking": False}}
+            "chat_template_kwargs": {"enable_thinking": False}, "reasoning_effort": "none"}
     req = urllib.request.Request(LOCAL + "/v1/chat/completions", method="POST", headers=h,
                                  data=json.dumps(body).encode())
     t = time.time()
     with urllib.request.urlopen(req, timeout=600) as r:
         d = json.load(r)
     return d, time.time() - t
+
+
+def answer(d) -> str:
+    m = d["choices"][0]["message"]
+    return (m.get("content") or m.get("reasoning") or m.get("reasoning_content") or "").strip()
 
 
 def rpc(method, params=None, timeout=20):
@@ -69,7 +76,7 @@ def main() -> int:
     ok = True
     print("=== 1. direct lane `small` → Switchyard model route → PAIR proxy → SGLang")
     d, dt = chat("small", [{"role": "user", "content": "Reply with exactly: chain-ok"}])
-    text = d["choices"][0]["message"]["content"].strip()
+    text = answer(d)
     print(f"  model={d['model']} {dt:.1f}s tokens={d.get('usage', {}).get('completion_tokens')} :: {text[:60]!r}")
     ok &= "chain-ok" in text
 
@@ -80,9 +87,9 @@ def main() -> int:
                  "Now write the patch."):
         hist.append({"role": "user", "content": text})
         d, dt = chat("auto", hist, task_type="code", session=SID)
-        ans = d["choices"][0]["message"]["content"] or ""
+        ans = answer(d)
         hist.append({"role": "assistant", "content": ans})
-        print(f"  turn {len(hist) // 2}: model={d['model']} {dt:.1f}s :: {ans.strip()[:50]!r}")
+        print(f"  turn {len(hist) // 2}: model={d['model']} {dt:.1f}s :: {ans[:50]!r}")
 
     print("=== 3. evidence")
     stats = json.load(urllib.request.urlopen(HUB + "/v1/routing/stats", timeout=10))

@@ -34,6 +34,9 @@ class Node:
 
     @property
     def health_url(self) -> str:
+        if self.engine == "pair":
+            # PAIR's OpenAI proxy: no /health; the advertised model list is the liveness signal
+            return self.base_url.rstrip("/") + "/models"
         return self.base_url.rsplit("/v1", 1)[0] + "/health"
 
 

@@ -14,6 +14,7 @@ ROUTES_FILE = STATE / "routes.yaml"
 MODE_FILE = STATE / "cluster_mode"
 REGISTRY_FILE = STATE / "nodes.json"
 TOKEN_FILE = STATE / "join_token"
+DECIDER_FILE = STATE / "decider_url"   # written by `cluster init`; route generation in any process reads it
 MODELS_DIR = Path(os.environ.get("HOMED_MODELS", Path.home() / ".homed" / "models"))
 
 GATEWAY_PORT = int(os.environ.get("HOMED_GATEWAY_PORT", "4000"))

@@ -9,7 +9,7 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 
-from ..paths import MODE_FILE, ROUTES_FILE, ROOT, ensure_dirs
+from ..paths import DECIDER_FILE, MODE_FILE, ROUTES_FILE, ROOT, ensure_dirs
 from ..control.health import Assessment, mode as compute_mode
 from ..control.registry import Node
 
@@ -48,6 +48,9 @@ class Judge:
 def judge_from_env() -> Judge:
     env = _env()
     url = env.get("DECIDER_URL", "")
+    if not url and DECIDER_FILE.exists():
+        # `cluster init` started the decider; regen / the watchdog run in other processes
+        url = DECIDER_FILE.read_text().strip()
     provider = env.get("JUDGE_PROVIDER", "http" if url else "llm")
     return Judge(provider=provider, url=url,
                  min_turn=int(env.get("JUDGE_MIN_TURN", "1")),

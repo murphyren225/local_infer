@@ -63,6 +63,30 @@ def register_local(lanes: list[presets.Lane], hw: probe.Hardware) -> None:
                                hw=hw.label, engine=lane.engine, local=True))
 
 
+def pair_nodes(proxy: str, hw: probe.Hardware, env: dict[str, str] | None = None,
+               models: list[str] | None = None) -> list[Node]:
+    """PAIR mode (PAIR_PROXY_URL set): this host starts no engine of its own. The PAIR OpenAI
+    proxy is the only target — Switchyard names the model, PAIR picks the node that holds it
+    (docs/pipeline-design.md). Pools come from PAIR_WEAK_MODEL / PAIR_STRONG_MODEL; when unset
+    both pools use the first model PAIR advertises (one small model on every node, phase 1)."""
+    env = env if env is not None else routes._env()
+    proxy = proxy.rstrip("/")
+    if models is None:
+        with urllib.request.urlopen(proxy + "/models", timeout=10) as r:
+            models = [m["id"] for m in json.load(r).get("data", [])]
+    if not models:
+        raise RuntimeError(f"PAIR proxy at {proxy} advertises no model (is an engine running?)")
+    host = socket.gethostname().split(".")[0]
+    out = []
+    for pool in ("strong", "weak"):
+        model = env.get(f"PAIR_{pool.upper()}_MODEL") or models[0]
+        if model not in models:
+            raise RuntimeError(f"PAIR_{pool.upper()}_MODEL={model} is not advertised by PAIR: {models}")
+        # local=False: the watchdog never tries to heal a PAIR-managed engine; PAIR owns its lifecycle
+        out.append(Node(f"{host}-pair-{pool}", pool, model, proxy, hw=hw.label, engine="pair", local=False))
+    return out
+
+
 def regen() -> str:
     a = health.assess(registry.load())
     m = routes.write(a)
@@ -99,25 +123,38 @@ def start_decider() -> None:
     if url and "127.0.0.1" not in url and "localhost" not in url:
         return
     port = int(env.get("DECIDER_PORT", "4100"))
-    if procs.healthy(f"http://127.0.0.1:{port}/health"):
-        return
-    procs.spawn("decider", [sys.executable, "-m", "decider", "--backend", env.get("DECIDER_BACKEND", "rules"),
-                             "--port", str(port)], env={"DECIDER_LOG": str(paths.LOGS / "decisions.jsonl")})
-    if procs.wait_http(f"http://127.0.0.1:{port}/health", 20):
-        os.environ.setdefault("DECIDER_URL", f"http://127.0.0.1:{port}")
+    local_url = f"http://127.0.0.1:{port}"
+    if not procs.healthy(local_url + "/health"):
+        procs.spawn("decider", [sys.executable, "-m", "decider", "--backend", env.get("DECIDER_BACKEND", "rules"),
+                                 "--port", str(port)], env={"DECIDER_LOG": str(paths.LOGS / "decisions.jsonl")})
+        if not procs.wait_http(local_url + "/health", 20):
+            fail("decider did not start; auto route falls back to the LLM judge")
+            return
         ok(f"decider ({env.get('DECIDER_BACKEND', 'rules')}) on :{port}")
-    else:
-        fail("decider did not start; auto route falls back to the LLM judge")
+    os.environ.setdefault("DECIDER_URL", local_url)
+    paths.DECIDER_FILE.write_text(local_url)   # regen / watchdog processes read this
 
 
 def cmd_init(args) -> int:
     paths.ensure_dirs()
     start_decider()
     hw = probe.probe()
-    preset_name = args.preset or probe.choose_preset(hw)
-    print(f"== init: {hw.label} → preset {preset_name}")
-    lanes = start_local_lanes(preset_name)
-    register_local(lanes, hw)
+    proxy = routes._env().get("PAIR_PROXY_URL", "")
+    if proxy:
+        print(f"== init: {hw.label} → PAIR mode, engines behind {proxy}")
+        lanes: list[presets.Lane] = []
+        host = socket.gethostname().split(".")[0]
+        for stale in [n for n in registry.load().values() if n.local and n.name.startswith(host + "-")]:
+            registry.unregister(stale.name)   # this host's own lanes from a non-PAIR init
+            say(f"dropped stale local lane {stale.name}")
+        for n in pair_nodes(proxy, hw):
+            registry.register(n)
+            ok(f"{n.pool} pool → {n.model} via PAIR")
+    else:
+        preset_name = args.preset or probe.choose_preset(hw)
+        print(f"== init: {hw.label} → preset {preset_name}")
+        lanes = start_local_lanes(preset_name)
+        register_local(lanes, hw)
     token = registry.issue_token()
     try:
         m = regen()
@@ -208,7 +245,8 @@ def cmd_status(args) -> int:
     a = health.assess(nodes)
     for n in nodes.values():
         live = any(x.name == n.name for x in a.healthy.get(n.pool, []))
-        (ok if live else fail)(f"{n.pool:<6} {n.name:<18} {n.model:<18} {'local' if n.local else 'remote'}  {n.hw}")
+        where = "pair" if n.engine == "pair" else ("local" if n.local else "remote")
+        (ok if live else fail)(f"{n.pool:<6} {n.name:<18} {n.model:<18} {where:<6} {n.hw}")
     (ok if gateway.healthy() else fail)(f"gateway :{paths.GATEWAY_PORT}")
     (ok if procs.healthy(f'http://127.0.0.1:{paths.CONSOLE_PORT}/api/status') else fail)(f"console :{paths.CONSOLE_PORT}")
     (ok if procs.alive('watchdog') else fail)("watchdog")
@@ -222,6 +260,7 @@ def cmd_stop(args) -> int:
     for name in ("watchdog", "console", gateway.NAME, "decider", "tunnel", "engine-strong", "engine-weak"):
         if procs.stop(name):
             say(f"stopped {name}")
+    paths.DECIDER_FILE.unlink(missing_ok=True)
     return 0
 
 
