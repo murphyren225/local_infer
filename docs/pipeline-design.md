@@ -207,7 +207,7 @@ PAIR 原生是"一个引擎一个进程一个模型"。第一步下：
 | 4090 上端到端：Mac 本机服务 → 隧道 → Switchyard fork（:4000）→ decider（:4100）→ PAIR 代理（:1234）→ SGLang（:30000） | **完成**（2026-09-27，证据见下） |
 | 投机解码 preset（EAGLE-3） | 下一步 |
 
-端到端证据（`scratchpad/e2e_chain.py`，Mac 发起）：`small` 直达路由 0.5 s 返回 `chain-ok`；`auto` 三轮、`x-task-type: code`：decider 两次收到 `task_type=code`，给出 `route{weak 0.3, strong 0.7}`；Switchyard RL 轨迹三条依次 `served_tier = weak / strong / strong`（turn 2 达到 confirmations=2 锁定强池，turn 3 不再问决策器），前两条带完整 `decision`；PAIR 账本五条 `qwen3-1.7b / lmstudio / completed`。当前弱池与强池是同一个 `qwen3-1.7b`，所以"锁定强池"只在轨迹里可见，不改变实际模型；换成两档模型只需改 routes 生成器的 target。
+端到端证据（`tests/e2e_chain.py`，Mac 发起，端点由 `E2E_LOCAL/E2E_HUB/E2E_PAIR_RPC` 指定）：`small` 直达路由 0.5 s 返回 `chain-ok`；`auto` 三轮、`x-task-type: code`：decider 两次收到 `task_type=code`，给出 `route{weak 0.3, strong 0.7}`；Switchyard RL 轨迹三条依次 `served_tier = weak / strong / strong`（turn 2 达到 confirmations=2 锁定强池，turn 3 不再问决策器），前两条带完整 `decision`；PAIR 账本五条 `qwen3-1.7b / lmstudio / completed`。当前弱池与强池是同一个 `qwen3-1.7b`，所以"锁定强池"只在轨迹里可见，不改变实际模型；换成两档模型只需改 routes 生成器的 target。
 
 两处踩坑记入设计：PAIR 引擎管理器进程模式的 `runtime.args` 只替换 `{install_dir}/{host}/{port}` 占位符，不展开 `$ENV`，所以模型路径这类节点差异走 `<config>/engines/<engine>.json` 深合并覆盖，而不是环境变量；`runtime.bin` 会被 `detect` 命中的路径覆盖，因此 `detect` 指向 venv 的 python，argv 以 `-m sglang.launch_server` 开头。
 
