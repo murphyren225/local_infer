@@ -215,3 +215,24 @@ Switchyard fork 的安装方式（Intel Mac 没有 Rust 工具链，不重编 wh
 
 尚未验证：两台同模型节点之间的硬件选择（Mac 跑不了 SGLang、levi 暂不用，只有 4090 一个 SGLang 节点）；以及 anyjev 后端上 GPU。
 
+
+## 9. 双机拓扑：Mac 调度，PAIR 把 Mac 和 4090 绑成一个集群（2026-09-27 跑通）
+
+目标形态（用户定义）：Mac 上跑 Switchyard 做调度；Mac 与 4090 通过 PAIR 绑成一个集群，PAIR 在节点间选硬件；引擎在被选中的节点上推理。现状与目标一致，证据在下面。
+
+```
+Pi / 本机服务 :7000 ──▶ Switchyard(fork) :4000 ──▶ decider :4100
+                              │  weak  → PAIR ollama-proxy :21434 ──▶ {Mac Ollama, 4090 Ollama}   模型 qwen3:1.7b
+                              └─ strong→ PAIR lm-proxy    :11234 ──▶ {4090 SGLang}               模型 qwen3-1.7b
+                         （Mac，全部本机进程）                  （PAIR 手动节点 autodl-4090，经 SSH 隧道）
+```
+
+- **`cluster init` 的 PAIR 模式**：`.env` 里有 `PAIR_PROXY_URL` 时不再自己起引擎，而是读 PAIR 代理的模型清单注册两个池；`PAIR_STRONG_PROXY_URL` / `PAIR_WEAK_PROXY_URL` 让每个池指向各自的代理（PAIR 一种引擎家族一个代理：Ollama 代理和 LM 槽位代理各自只在自己家族的节点里选）。节点 `engine=pair, local=false`，watchdog 不去"治"它，存活探测用代理的 `/v1/models`。
+- **决策器地址持久化**：`state/decider_url` 由 `cluster init` 写入，`regen` 和 watchdog 在别的进程里也能读到，否则重生成路由时会退回 LLM 判定。
+- **Mac 上 PAIR 用端口偏移构建**（`~/pair/Personal-AI-Router/services-shift`，所有监听端口 +10000，含本次补的 LM 槽位代理 1234→11234），桌面端 `desktop/cli-bin` 换成这套二进制（原版备份在 `cli-bin.stock`）。原因：PAIR 端口写死，两个节点互拨对方固定端口，Mac 在 NAT 后、4090 在云上，只能把 4090 的固定端口隧道到 Mac 的 127.0.0.1，于是 Mac 自己的必须让开。
+- **隧道**（Mac → 4090）：`14318–14323`（节点信息/集群/引擎管理）、`1234→30000`（SGLang 作为手动节点的 LM 引擎）、`11434→11435`（4090 的 Ollama 引擎）、`17998→17999`（pairctl）、`14000→4000`、`14100→4100`、`30000→30000`。手动节点探测的就是 `addr:1234/v1/models`、`addr:11434/api/tags`、`addr:14318`。
+- **手动节点免点界面**：桌面端把手动节点持久化在 `~/Library/Application Support/Nvidia Corporation/Personal AI Router/configs/manual-nodes.json`（`[{"id","address","name"}]`），启动时自动 `node/add`。写入 `{"address":"127.0.0.1","name":"autodl-4090"}` 即可。
+- **证据**：`tests/e2e_chain.py`（`E2E_HUB=http://127.0.0.1:4000 E2E_PAIR_RPC=""`）PASS；Mac 网关 RL 轨迹 `served_tier = weak / strong / strong`；Mac PAIR 账本最后四条 `qwen3:1.7b ollama → 4090`、`qwen3-1.7b lmstudio → 4090`；桌面端 Jobs 列表显示 "Ran on autodl-4090"。4090 独有的 `qwen3:8b` 经 Mac 的 Ollama 代理也能直接到 4090。
+- **Switchyard fork 顺手修的**：`reasoning_effort: none` 原被上游 normalizer 改成 `high`，Ollama 的 Qwen3 因此一直在思考；现在 `none` 是合法值。
+
+未做：反向隧道（4090 看见 Mac，目前不需要）；第二个 LM 家族节点（Mac 上可用 llama-server 顶 LM 槽位，让强池也有硬件选择）；正式跨网组网方案替代隧道。

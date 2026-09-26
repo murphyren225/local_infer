@@ -84,6 +84,8 @@ def cloud_from_env() -> Cloud:
 def _target(n: Node) -> Target:
     # PAIR_PROXY_URL: hand replica selection to a PAIR (fork) OpenAI proxy on this host —
     # Switchyard still names the model, PAIR picks the node that holds it.
+    if n.engine == "pair":
+        return Target(n.model, n.base_url)      # registered by `cluster init` with its pool's proxy
     proxy = _env().get("PAIR_PROXY_URL", "")
     return Target(n.model, proxy.rstrip("/") if proxy else n.base_url)
 

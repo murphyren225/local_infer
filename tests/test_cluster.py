@@ -166,16 +166,25 @@ def test_pair_mode_nodes(monkeypatch):
     from cluster import cli
     from cluster.node import probe
     hw = probe.Hardware(kind="cpu", label="Intel Mac · CPU")
-    nodes = cli.pair_nodes("http://127.0.0.1:11434/v1/", hw, env={}, models=["qwen3:1.7b", "qwen3:8b"])
+    catalog = {"http://127.0.0.1:11434/v1": ["qwen3:1.7b", "qwen3:8b"],     # PAIR's Ollama proxy
+               "http://127.0.0.1:1234/v1": ["qwen3-1.7b"]}                    # PAIR's LM-slot proxy (SGLang)
+    fetch = lambda url: catalog[url]  # noqa: E731
+    nodes = cli.pair_nodes("http://127.0.0.1:11434/v1/", hw, env={}, fetch=fetch)
     assert [(n.pool, n.model) for n in nodes] == [("strong", "qwen3:1.7b"), ("weak", "qwen3:1.7b")]
     assert all(n.engine == "pair" and not n.local and n.base_url == "http://127.0.0.1:11434/v1" for n in nodes)
     assert nodes[0].health_url == "http://127.0.0.1:11434/v1/models"
-    nodes = cli.pair_nodes("http://127.0.0.1:11434/v1", hw, env={"PAIR_STRONG_MODEL": "qwen3:8b"},
-                           models=["qwen3:1.7b", "qwen3:8b"])
+    nodes = cli.pair_nodes("http://127.0.0.1:11434/v1", hw, env={"PAIR_STRONG_MODEL": "qwen3:8b"}, fetch=fetch)
     assert nodes[0].model == "qwen3:8b" and nodes[1].model == "qwen3:1.7b"
+    # one proxy per pool: weak on this Mac's Ollama, strong on the 4090's SGLang behind the LM-slot proxy
+    nodes = cli.pair_nodes("http://127.0.0.1:11434/v1", hw,
+                           env={"PAIR_STRONG_PROXY_URL": "http://127.0.0.1:1234/v1"}, fetch=fetch)
+    assert (nodes[0].model, nodes[0].base_url) == ("qwen3-1.7b", "http://127.0.0.1:1234/v1")
+    assert (nodes[1].model, nodes[1].base_url) == ("qwen3:1.7b", "http://127.0.0.1:11434/v1")
+    from cluster.router import routes
+    assert routes._target(nodes[0]).base_url == "http://127.0.0.1:1234/v1"   # not the global PAIR_PROXY_URL
     import pytest
     with pytest.raises(RuntimeError):
-        cli.pair_nodes("http://127.0.0.1:11434/v1", hw, env={"PAIR_WEAK_MODEL": "nope"}, models=["qwen3:1.7b"])
+        cli.pair_nodes("http://127.0.0.1:11434/v1", hw, env={"PAIR_WEAK_MODEL": "nope"}, fetch=fetch)
 
 
 def test_judge_from_decider_file(state, monkeypatch):

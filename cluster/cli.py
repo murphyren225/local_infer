@@ -63,27 +63,33 @@ def register_local(lanes: list[presets.Lane], hw: probe.Hardware) -> None:
                                hw=hw.label, engine=lane.engine, local=True))
 
 
+def _pair_models(proxy: str) -> list[str]:
+    with urllib.request.urlopen(proxy + "/models", timeout=10) as r:
+        return [m["id"] for m in json.load(r).get("data", [])]
+
+
 def pair_nodes(proxy: str, hw: probe.Hardware, env: dict[str, str] | None = None,
-               models: list[str] | None = None) -> list[Node]:
-    """PAIR mode (PAIR_PROXY_URL set): this host starts no engine of its own. The PAIR OpenAI
-    proxy is the only target — Switchyard names the model, PAIR picks the node that holds it
-    (docs/pipeline-design.md). Pools come from PAIR_WEAK_MODEL / PAIR_STRONG_MODEL; when unset
-    both pools use the first model PAIR advertises (one small model on every node, phase 1)."""
+               fetch=_pair_models) -> list[Node]:
+    """PAIR mode (PAIR_PROXY_URL set): this host starts no engine of its own. PAIR's OpenAI
+    proxies are the targets — Switchyard names the model, PAIR picks the node that holds it
+    (docs/pipeline-design.md). PAIR runs one proxy per engine family (Ollama :11434, LM Studio
+    slot :1234), so a pool may point at its own proxy: PAIR_STRONG_PROXY_URL / PAIR_WEAK_PROXY_URL
+    default to PAIR_PROXY_URL. Pool model from PAIR_STRONG_MODEL / PAIR_WEAK_MODEL, else the first
+    model that proxy advertises (one small model on every node, phase 1)."""
     env = env if env is not None else routes._env()
-    proxy = proxy.rstrip("/")
-    if models is None:
-        with urllib.request.urlopen(proxy + "/models", timeout=10) as r:
-            models = [m["id"] for m in json.load(r).get("data", [])]
-    if not models:
-        raise RuntimeError(f"PAIR proxy at {proxy} advertises no model (is an engine running?)")
     host = socket.gethostname().split(".")[0]
     out = []
     for pool in ("strong", "weak"):
+        url = (env.get(f"PAIR_{pool.upper()}_PROXY_URL") or proxy).rstrip("/")
+        models = fetch(url)
+        if not models:
+            raise RuntimeError(f"PAIR proxy at {url} advertises no model (is an engine running?)")
         model = env.get(f"PAIR_{pool.upper()}_MODEL") or models[0]
         if model not in models:
-            raise RuntimeError(f"PAIR_{pool.upper()}_MODEL={model} is not advertised by PAIR: {models}")
-        # local=False: the watchdog never tries to heal a PAIR-managed engine; PAIR owns its lifecycle
-        out.append(Node(f"{host}-pair-{pool}", pool, model, proxy, hw=hw.label, engine="pair", local=False))
+            raise RuntimeError(f"PAIR_{pool.upper()}_MODEL={model} is not advertised by PAIR at {url}: {models}")
+        # local=False: the watchdog never tries to heal a PAIR-managed engine; PAIR owns its lifecycle.
+        # base_url is the pool's proxy; routes._target keeps it as-is for engine == "pair".
+        out.append(Node(f"{host}-pair-{pool}", pool, model, url, hw=hw.label, engine="pair", local=False))
     return out
 
 
