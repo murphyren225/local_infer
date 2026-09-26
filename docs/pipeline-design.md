@@ -202,10 +202,16 @@ PAIR 原生是"一个引擎一个进程一个模型"。第一步下：
 |---|---|
 | Switchyard fork：`DecisionProvider`（llm/rules/http/jev）、`x-task-type`、ε 探索、决策写入 RL 轨迹、YAML 键 `judge.provider/url/min_turn/escalate_threshold/explore_epsilon` | **完成**，上游 87 个相关测试 + 12 个新测试通过；Mac 上以 `provider: http` 真跑：turn 1–2 问决策器、turn 2 锁定强池、turn 3 不再问 |
 | 决策器服务 `decider/`（rules / jev / anyjev 后端，`logs/decisions.jsonl`） | **完成**（rules 真跑；anyjev 等 GPU） |
-| local_infer 接线：`routes.py` 生成 `judge.provider: http`（`DECIDER_URL`）、`PAIR_PROXY_URL` 把 target 指向 PAIR 代理；`cluster init` 拉起 decider；`engine.py` 加 `sglang`；preset `qwen3-24gb-sglang.env` | **完成**（单元测试；SGLang 真机待 4090 开机） |
-| PAIR fork 第一步：`lmstudio.json` 改为启动 SGLang | **完成**（manifest 已提交；真机待 4090） |
-| 4090 上：装 SGLang、PAIR 代理路由到它、Switchyard target 指向 PAIR 代理、端到端重放 | 待 4090 开机 |
-| 投机解码 preset（EAGLE-3） | 待上一步 |
+| local_infer 接线：`routes.py` 生成 `judge.provider: http`（`DECIDER_URL`）、`PAIR_PROXY_URL` 把 target 指向 PAIR 代理；`cluster init` 拉起 decider；`engine.py` 加 `sglang`；preset `qwen3-24gb-sglang.env`；个人端本机服务透传 `x-task-type` | **完成** |
+| PAIR fork 第一步：`lmstudio.json` 改为启动 SGLang（进程模式，argv 为字面值，按节点用 `engines/lmstudio.json` 覆盖模型路径与参数） | **完成**，4090 真机由 PAIR 引擎管理器拉起 SGLang，`engine:models` 报 `qwen3-1.7b`，`:1234` 代理可对话 |
+| 4090 上端到端：Mac 本机服务 → 隧道 → Switchyard fork（:4000）→ decider（:4100）→ PAIR 代理（:1234）→ SGLang（:30000） | **完成**（2026-09-27，证据见下） |
+| 投机解码 preset（EAGLE-3） | 下一步 |
 
-Switchyard fork 的安装方式（Intel Mac 没有 Rust 工具链，不重编 wheel）：装官方 0.2.0 wheel 取得 `switchyard_rust` 扩展，再把 fork 的 `switchyard/` 纯 Python 包覆盖到 site-packages（`bin/install.sh` 后续加这一步）。
+端到端证据（`scratchpad/e2e_chain.py`，Mac 发起）：`small` 直达路由 0.5 s 返回 `chain-ok`；`auto` 三轮、`x-task-type: code`：decider 两次收到 `task_type=code`，给出 `route{weak 0.3, strong 0.7}`；Switchyard RL 轨迹三条依次 `served_tier = weak / strong / strong`（turn 2 达到 confirmations=2 锁定强池，turn 3 不再问决策器），前两条带完整 `decision`；PAIR 账本五条 `qwen3-1.7b / lmstudio / completed`。当前弱池与强池是同一个 `qwen3-1.7b`，所以"锁定强池"只在轨迹里可见，不改变实际模型；换成两档模型只需改 routes 生成器的 target。
+
+两处踩坑记入设计：PAIR 引擎管理器进程模式的 `runtime.args` 只替换 `{install_dir}/{host}/{port}` 占位符，不展开 `$ENV`，所以模型路径这类节点差异走 `<config>/engines/<engine>.json` 深合并覆盖，而不是环境变量；`runtime.bin` 会被 `detect` 命中的路径覆盖，因此 `detect` 指向 venv 的 python，argv 以 `-m sglang.launch_server` 开头。
+
+Switchyard fork 的安装方式（Intel Mac 没有 Rust 工具链，不重编 wheel）：装官方 0.2.0 wheel 取得 `switchyard_rust` 扩展，再把 fork 的 `switchyard/` 纯 Python 包覆盖到 site-packages（`bin/install.sh` 已加这一步，`SWITCHYARD_FORK` 指向 fork 目录）。
+
+尚未验证：两台同模型节点之间的硬件选择（Mac 跑不了 SGLang、levi 暂不用，只有 4090 一个 SGLang 节点）；以及 anyjev 后端上 GPU。
 

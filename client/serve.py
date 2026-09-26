@@ -37,6 +37,9 @@ GATEWAY = os.environ.get("CLIENT_GATEWAY", "http://127.0.0.1:4000").rstrip("/")
 AGENT_TIMEOUT = int(os.environ.get("CLIENT_AGENT_TIMEOUT", "900"))
 TOKEN = secrets.token_urlsafe(24)
 PORT = 7000
+# Routing hints forwarded verbatim to the hub (Switchyard fork → decider). x-task-type is the
+# harness's own label for the task (code|edit|qa|extract|agent); everything else is dropped.
+HINT_HEADERS = ("x-task-type",)
 
 
 def derive_session(body: bytes | None) -> str | None:
@@ -156,6 +159,9 @@ class Handler(BaseHTTPRequestHandler):
         session = self.headers.get(SESSION_HEADER) or (derive_session(body) if method == "POST" else None)
         if session:
             headers[SESSION_HEADER] = session
+        for name in HINT_HEADERS:  # routing hints the harness may set; the decider reads them
+            if self.headers.get(name):
+                headers[name] = self.headers[name]
         req = urllib.request.Request(GATEWAY + self.path, data=body, method=method, headers=headers)
         start = time.monotonic()
         try:

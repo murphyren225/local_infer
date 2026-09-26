@@ -674,9 +674,14 @@ routes:
 
 1. 会话已在粘性表 → 强池，判定器不参与；
 2. 轮次 < `min_judge_turn` → 弱池，不裁决；
-3. 判定器读会话压缩视图（任务框架 + 最近 N 轮，每条截断），输出
-   `{"escalate": bool, "reason": str}`。判据是轨迹（重复循环、假进展、
-   跑偏、绝望动作），不是单条消息难度；
+3. 判定器读会话压缩视图（任务框架 + 最近 N 轮，每条截断），经
+   `DecisionProvider` 接口（fork 新增，`judge.provider: llm|rules|http|jev`）
+   输出 `Decision{route{weak,strong,cloud}, confidence, task_type, reason}`；
+   `strong+cloud ≥ escalate_threshold` 视为升级。`http` 提供者把状态发给
+   本仓库的 `decider/` 服务（`DECIDER_URL`），请求头 `x-task-type` 由个人端
+   本机服务透传，作为状态的一个字段。判据是轨迹（重复循环、假进展、
+   跑偏、绝望动作），不是单条消息难度；ε 探索（`explore_epsilon`）随机
+   翻转结论并在 RL 轨迹里标 `explore=true`，供后续离线训练；
 4. 连续 `confirmations` 次升级结论 → 会话写入粘性表，此后单向走强池；
    任何一次否定结论清零计数；
 5. 判定器自身失败 → fail-open 停留弱池并计入 stats，不因判定器不可用
