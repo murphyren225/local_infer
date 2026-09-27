@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>链路总览</title>
+<style>
+  :root { --bg:#f5f6f8; --card:#fff; --line:#e3e6ea; --text:#1c2330; --muted:#6b7686;
+          --accent:#2563eb; --ok:#16a34a; --bad:#dc2626; --warn:#d97706; --idle:#c3c9d2; }
+  * { box-sizing:border-box; }
+  body { margin:0; font:14px/1.6 -apple-system,"Segoe UI",sans-serif; background:var(--bg); color:var(--text); }
+  header { display:flex; align-items:center; gap:14px; padding:10px 18px; background:var(--card); border-bottom:1px solid var(--line); position:sticky; top:0; z-index:2; }
+  header h1 { font-size:16px; margin:0; }
+  header a { color:var(--muted); font-size:13px; text-decoration:none; }
+  header .sp { flex:1; }
+  button { font:inherit; border-radius:10px; border:1px solid var(--line); background:var(--card); padding:6px 12px; cursor:pointer; }
+  button.primary { background:var(--accent); color:#fff; border-color:var(--accent); font-weight:600; }
+  button:disabled { opacity:.5; cursor:wait; }
+  label.chk { font-size:13px; color:var(--muted); display:flex; align-items:center; gap:6px; }
+  main { padding:18px; max-width:1400px; margin:0 auto; }
+  h2 { font-size:14px; color:var(--muted); margin:22px 0 10px; }
+  .flow { display:grid; grid-template-columns:repeat(4, minmax(0,1fr)); gap:12px; }
+  @media (max-width:1000px) { .flow { grid-template-columns:repeat(2, minmax(0,1fr)); } }
+  .link { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:12px 14px; position:relative; }
+  .link .num { font-size:11px; color:var(--muted); letter-spacing:.06em; }
+  .link .name { font-weight:600; margin:2px 0; display:flex; align-items:center; gap:8px; }
+  .link .what { font-size:12px; color:var(--muted); min-height:36px; }
+  .dot { display:inline-block; width:10px; height:10px; border-radius:50%; background:var(--idle); flex:none; }
+  .dot.ok { background:var(--ok); } .dot.bad { background:var(--bad); } .dot.run { background:var(--warn); animation:blink 1s infinite; }
+  @keyframes blink { 50% { opacity:.3; } }
+  .link .row { display:flex; align-items:center; gap:8px; margin-top:8px; }
+  .link .meta { font-size:11px; color:var(--muted); flex:1; }
+  .checks { margin:8px 0 0; padding:0; list-style:none; font-size:12px; display:none; }
+  .link.open .checks { display:block; }
+  .checks li { padding:2px 0; border-top:1px dashed var(--line); word-break:break-all; }
+  .checks li.ok::before { content:"✓ "; color:var(--ok); } .checks li.bad::before { content:"✗ "; color:var(--bad); }
+  .arrow { position:absolute; right:-13px; top:50%; color:var(--idle); font-size:16px; z-index:1; }
+  .pair { display:grid; grid-template-columns:2fr 1fr; gap:14px; }
+  @media (max-width:1000px) { .pair { grid-template-columns:1fr; } }
+  .panel { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:12px 14px; }
+  .node { display:flex; align-items:center; gap:12px; padding:10px 0; border-top:1px solid var(--line); }
+  .node:first-of-type { border-top:0; }
+  .node .n { font-weight:600; }
+  .node .d { font-size:12px; color:var(--muted); }
+  .node .sp { flex:1; }
+  .tag { font-size:11px; padding:1px 8px; border-radius:99px; background:#eef2ff; color:var(--accent); }
+  table { width:100%; border-collapse:collapse; font-size:12px; }
+  td, th { text-align:left; padding:4px 6px; border-top:1px solid var(--line); }
+  th { color:var(--muted); font-weight:500; border-top:0; }
+  form.add { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:8px; }
+  form.add input { font:inherit; border:1px solid var(--line); border-radius:8px; padding:6px 8px; }
+  form.add .full { grid-column:1 / -1; }
+  .hint { font-size:12px; color:var(--muted); margin-top:6px; }
+  .toast { position:fixed; bottom:18px; left:50%; transform:translateX(-50%); background:var(--text); color:#fff; padding:8px 14px; border-radius:10px; font-size:13px; display:none; }
+</style>
+</head>
+<body>
+<header>
+  <h1>🔗 链路总览</h1>
+  <a href="/">← 集群管理台</a>
+  <span class="sp"></span>
+  <label class="chk"><input type="checkbox" id="stopfirst" checked> 遇错即停</label>
+  <button class="primary" id="runall">全部测试</button>
+</header>
+<main>
+  <h2>请求走的路：本机服务 → Switchyard → 决策器 → PAIR 代理 → 引擎。七个环节从底往上，哪一环第一个失败，问题就在那一段。</h2>
+  <div class="flow" id="flow"></div>
+
+  <h2>PAIR：节点与调度</h2>
+  <div class="pair">
+    <div class="panel">
+      <div id="tunnel" class="hint">…</div>
+      <div id="nodes"></div>
+      <h2 style="margin-top:14px">添加远端节点</h2>
+      <form class="add" id="addform">
+        <input name="name" placeholder="节点名，如 autodl-4090" required>
+        <input name="address" placeholder="PAIR 拨的地址，隧道用 127.0.0.1" value="127.0.0.1" required>
+        <input name="ssh_target" class="full" placeholder="SSH 目标（可选），如 root@connect.westb.seetacloud.com；填了就自动开隧道">
+        <input name="ssh_port" placeholder="SSH 端口，如 43314">
+        <button class="primary" type="submit">添加并重启 PAIR</button>
+      </form>
+      <div class="hint">远端机器上需要已经在跑 PAIR（引擎管理器 + SGLang 在 LM 槽位）。添加会写入 PAIR 的手动节点配置并重启桌面端，约一分钟。</div>
+    </div>
+    <div class="panel">
+      <h2 style="margin-top:0">最近任务（PAIR 账本）</h2>
+      <table><thead><tr><th>时间</th><th>模型</th><th>跑在</th></tr></thead><tbody id="jobs"></tbody></table>
+    </div>
+  </div>
+</main>
+<div class="toast" id="toast"></div>
+
+<script>
+const LINKS = [
+  {n:1, name:"引擎直连", what:"4090 SGLang 与 Mac llama-server 各自能答，模型同名"},
+  {n:2, name:"PAIR 看见两台", what:"LM 槽位代理的名单里有这个模型；手动节点与自启状态在位"},
+  {n:3, name:"PAIR 选硬件", what:"八条并发，账本里两台机器都出现"},
+  {n:4, name:"决策器", what:"该升的给 strong，不该升的给 weak，概率归一，写日志"},
+  {n:5, name:"Switchyard 模型路由", what:"small / large 经 PAIR 到引擎"},
+  {n:6, name:"Switchyard auto", what:"判两次、锁强池、RL 轨迹 weak→strong→strong"},
+  {n:7, name:"个人端本机服务", what:"镜像 hub，透传 x-task-type"},
+  {n:"e2e", name:"整链", what:"从 :7000 进，一次跑完并汇总证据"},
+];
+const flow = document.getElementById("flow");
+const state = {};
+for (const l of LINKS) {
+  const el = document.createElement("div"); el.className = "link"; el.id = "link-" + l.n;
+  el.innerHTML = `<div class="num">${typeof l.n === "number" ? "环节 " + l.n : "最后"}</div>
+    <div class="name"><span class="dot"></span>${l.name}</div>
+    <div class="what">${l.what}</div>
+    <div class="row"><span class="meta">未测</span><button data-n="${l.n}">测试</button></div>
+    <ul class="checks"></ul>${l.n !== "e2e" ? '<span class="arrow">›</span>' : ""}`;
+  el.querySelector("button").onclick = () => run(l.n);
+  el.querySelector(".name").onclick = () => el.classList.toggle("open");
+  flow.appendChild(el);
+}
+function toast(m) { const t = document.getElementById("toast"); t.textContent = m; t.style.display = "block"; setTimeout(() => t.style.display = "none", 4000); }
+function setLink(n, status, meta, checks) {
+  const el = document.getElementById("link-" + n);
+  el.querySelector(".dot").className = "dot " + status;
+  el.querySelector(".meta").textContent = meta;
+  if (checks) {
+    const ul = el.querySelector(".checks"); ul.innerHTML = "";
+    for (const c of checks) { const li = document.createElement("li"); li.className = c.ok ? "ok" : "bad"; li.textContent = c.msg; ul.appendChild(li); }
+    if (checks.some(c => !c.ok)) el.classList.add("open");
+  }
+}
+async function run(n) {
+  setLink(n, "run", "测试中…");
+  const t = Date.now();
+  try {
+    const r = await fetch(n === "e2e" ? "/api/links/e2e" : "/api/links/run/" + n);
+    const d = await r.json();
+    const s = ((Date.now() - t) / 1000).toFixed(1) + "s · " + new Date().toLocaleTimeString();
+    setLink(n, d.pass ? "ok" : "bad", (d.pass ? "PASS · " : "FAIL · ") + s, d.checks);
+    state[n] = d.pass;
+    return d.pass;
+  } catch (e) { setLink(n, "bad", "无法运行: " + e, [{ok:false, msg:String(e)}]); return false; }
+}
+document.getElementById("runall").onclick = async () => {
+  const b = document.getElementById("runall"); b.disabled = true;
+  const stop = document.getElementById("stopfirst").checked;
+  for (const l of LINKS) { const ok = await run(l.n); if (!ok && stop) { toast("环节 " + l.n + " 失败，按设定停在这里"); break; } }
+  b.disabled = false;
+};
+async function refreshPair() {
+  try {
+    const d = await (await fetch("/api/pair")).json();
+    document.getElementById("tunnel").innerHTML =
+      `隧道到远端：<b style="color:${d.tunnel_ok ? "var(--ok)" : "var(--bad)"}">${d.tunnel_ok ? "在" : "断了"}</b>
+       · LM 槽位代理 :11234 名单：${(d.lm_proxy_models || []).join(", ") || "空"}`;
+    const nodes = document.getElementById("nodes"); nodes.innerHTML = "";
+    for (const n of d.nodes) {
+      const el = document.createElement("div"); el.className = "node";
+      el.innerHTML = `<span class="dot ${n.online ? "ok" : "bad"}"></span>
+        <div><div class="n">${n.name} <span class="tag">${n.kind === "self" ? "本机" : "远端·手动"}</span></div>
+        <div class="d">${n.address} · ${n.engine} · 模型 ${(n.models || []).join(", ") || "无"} · 任务 ${n.jobs}</div></div>
+        <span class="sp"></span>${n.kind === "manual" ? `<button data-name="${n.name}">移除</button>` : ""}`;
+      const rm = el.querySelector("button");
+      if (rm) rm.onclick = async () => { if (!confirm("移除节点 " + n.name + " 并重启 PAIR？")) return; rm.disabled = true;
+        await fetch("/api/pair/nodes/" + encodeURIComponent(n.name), {method:"DELETE"}); toast("已移除，PAIR 重启中"); setTimeout(refreshPair, 15000); };
+      nodes.appendChild(el);
+    }
+    const jobs = document.getElementById("jobs"); jobs.innerHTML = "";
+    for (const j of d.jobs) { const tr = document.createElement("tr"); tr.innerHTML = `<td>${j.time}</td><td>${j.model}</td><td>${j.node}</td>`; jobs.appendChild(tr); }
+  } catch (e) { document.getElementById("tunnel").textContent = "读取 PAIR 状态失败: " + e; }
+}
+document.getElementById("addform").onsubmit = async ev => {
+  ev.preventDefault();
+  const f = ev.target; const body = Object.fromEntries(new FormData(f).entries());
+  f.querySelector("button").disabled = true;
+  const r = await fetch("/api/pair/nodes", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(body)});
+  const d = await r.json();
+  f.querySelector("button").disabled = false;
+  toast(d.error || ("已写入 " + body.name + "，PAIR 重启中，约一分钟后刷新"));
+  setTimeout(refreshPair, 20000);
+};
+refreshPair(); setInterval(refreshPair, 10000);
+</script>
+</body>
+</html>

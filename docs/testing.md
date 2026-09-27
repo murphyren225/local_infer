@@ -331,3 +331,9 @@ bash /Users/murphyren/Desktop/local_infer/tests/manual.sh 3
 ```bash
 cd /Users/murphyren/Desktop/local_infer && python3 tests/links.py all
 ```
+
+## 图形界面：链路总览
+
+管理台加了一页 `http://localhost:6006/links`（首页左上角"🔗 链路总览"进）。八张卡片就是七个环节加整链，每张卡片一个"测试"按钮，跑的是 `tests/links.py` 同一套检查，✓/✗ 逐条列在卡片里；右上角"全部测试"按顺序跑，勾着"遇错即停"时第一个失败就停在那一环。下面是 PAIR 面板：隧道状态、LM 槽位代理的名单、每台节点（本机 / 远端手动节点）的在线状态、模型和任务数、最近任务落在哪台机器。"添加远端节点"表单填节点名、地址、SSH 目标和端口，会写入 PAIR 的手动节点配置、开隧道、重启 PAIR 桌面端，一分钟后节点出现；"移除"反之。桌面端的启停在 `bin/pair-desktop start|stop|restart|status|show`。
+
+PAIR 桌面端自己的总览页原本只画集群成员和本机，手动节点不画卡片；fork 里改成也画可路由的非成员节点（`1dfbbc6`），现在 4090 有自己的卡片，显示 "NVIDIA GeForce RTX 4090 D"。

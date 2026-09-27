@@ -1,0 +1,50 @@
+#!/usr/bin/env bash
+# PAIR desktop app (NVIDIA Personal AI Router, our fork) on this Mac, dev-mode launcher.
+#
+#   bin/pair-desktop start | stop | restart | status | show
+#
+# The app is a tray app: `show` brings its overview window up (fires macOS `activate`).
+# PAIR_DESKTOP_DIR points at the fork's desktop/ checkout; cli-bin there holds the
+# port-shifted service binaries (docs/pipeline-design.md §9).
+set -u
+DESKTOP=${PAIR_DESKTOP_DIR:-$HOME/pair/Personal-AI-Router/desktop}
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+LOG="$ROOT/logs/pair-desktop.log"
+ELECTRON="$DESKTOP/node_modules/electron/dist/Electron.app"
+
+stop() {
+  pkill -TERM -f "Electron.app/Contents/MacOS/Electron \." 2>/dev/null
+  pkill -TERM -f "electron-vite de[v]" 2>/dev/null
+  sleep 6
+  pkill -TERM -f "cli-bin/nvpair-[a-z-]*" 2>/dev/null
+  pkill -TERM -f "cli-bin/[ol]*[a-z]*-proxy" 2>/dev/null
+  pkill -TERM -f "lmstudio/llama-serve[r]" 2>/dev/null
+  sleep 2
+}
+
+start() {
+  mkdir -p "$ROOT/logs"
+  (cd "$DESKTOP" && nohup npx --cache "$HOME/.npm-pair" electron-vite dev > "$LOG" 2>&1 < /dev/null &)
+  for _ in $(seq 1 45); do
+    sleep 2
+    curl -s -m 2 -o /dev/null http://127.0.0.1:11234/v1/models && { echo "PAIR desktop up (lm-proxy :11234)"; return 0; }
+  done
+  echo "PAIR desktop did not come up within 90s; see $LOG"; return 1
+}
+
+status() {
+  local app proxy
+  app=$(pgrep -f "Electron.app/Contents/MacOS/Electron \." | head -1)
+  proxy=$(curl -s -m 2 -o /dev/null -w '%{http_code}' http://127.0.0.1:11234/v1/models)
+  echo "app pid: ${app:-none}   lm-proxy :11234 http ${proxy}"
+  [ -n "$app" ] && [ "$proxy" = 200 ]
+}
+
+case "${1:-status}" in
+  start)   start ;;
+  stop)    stop; echo "stopped" ;;
+  restart) stop; start ;;
+  status)  status ;;
+  show)    open "$ELECTRON" ;;
+  *) echo "usage: $0 start|stop|restart|status|show"; exit 2 ;;
+esac
