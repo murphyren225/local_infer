@@ -202,11 +202,11 @@ curl -s http://127.0.0.1:4000/v1/chat/completions -H 'Content-Type: application/
 
 正常：`"model":"qwen3-1.7b"`，`"content":"large-ok"`。
 
-再跑一次环节 3 的账本命令，最后两条应该是 `qwen3:1.7b ollama` 和 `qwen3-1.7b lmstudio`。`lmstudio` 是 PAIR 里那个槽位的内部名字，实际跑的是 SGLang。
+再跑一次环节 3 的账本命令，最后两条应该都是 `qwen3-1.7b lmstudio`，落在哪台机器由 PAIR 决定。`lmstudio` 是 PAIR 里那个槽位的内部名字，实际跑的是 SGLang 或 llama-server。
 
 两条请求都同时带了 `reasoning_effort` 和 `chat_template_kwargs`，因为事先不知道会落到哪个家族的引擎，各家认各家的，多余的会被忽略。
 
-**挂了怎么读。** 502：Switchyard 到代理那一跳断了，看 `state/routes.yaml` 里的 `base_url` 是不是 21434 和 11234。`model` 字段和预期反了：`.env` 里 `PAIR_PROXY_URL` 和 `PAIR_STRONG_PROXY_URL` 配反了，改完 `bin/cluster regen`。
+**挂了怎么读。** 502：Switchyard 到代理那一跳断了，看 `state/routes.yaml` 里的 `base_url` 是不是 11234。返回的 `model` 不是 `qwen3-1.7b`：`.env` 里 `PAIR_PROXY_URL` 指错了代理，改完 `bin/cluster regen`。
 
 ## 环节 6：Switchyard auto 路由
 
