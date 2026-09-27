@@ -1,0 +1,55 @@
+#!/usr/bin/env bash
+# Runs ON a Linux+CUDA node to make it a PAIR node with SGLang in the LM slot (docs/pipeline-design.md §9).
+# Idempotent. Expects, in the same directory as this script (scp them together):
+#   nvpair-*/ollama-proxy/lmstudio-proxy   the fork's linux/amd64 service binaries (services/build/bin)
+#   pairctl.py, taillog.py                 headless broker driver + log tail helper
+# and on the node: a SGLang venv at $SGLANG_VENV and the model at $MODEL_PATH (see bin/pair-node-prepare).
+#
+#   bash pair-node-setup [--served-name qwen3-1.7b] [--model /root/autodl-tmp/models/Qwen3-1.7B] [--no-draft]
+set -euo pipefail
+HERE="$(cd "$(dirname "$0")" && pwd)"
+SGLANG_VENV=${SGLANG_VENV:-/root/autodl-tmp/sglang-venv}
+MODEL_PATH=${MODEL_PATH:-/root/autodl-tmp/models/Qwen3-1.7B}
+SERVED=${SERVED_NAME:-qwen3-1.7b}
+DRAFT=1
+while [ $# -gt 0 ]; do case "$1" in
+  --served-name) SERVED=$2; shift 2 ;; --model) MODEL_PATH=$2; shift 2 ;; --no-draft) DRAFT=0; shift ;;
+  *) echo "unknown arg $1"; exit 2 ;; esac; done
+
+CFG="/root/.config/Nvidia Corporation/Personal AI Router"
+BIN=/root/pair/Personal-AI-Router/services/build/bin
+mkdir -p "$BIN" "$CFG/engines" "$CFG/engine-bin/lmstudio" /root/pair
+
+echo "== binaries → $BIN"
+for b in "$HERE"/nvpair-* "$HERE"/ollama-proxy "$HERE"/lmstudio-proxy; do [ -f "$b" ] && cp "$b" "$BIN/" && chmod +x "$BIN/$(basename "$b")"; done
+cp "$HERE/pairctl.py" "$HERE/taillog.py" /root/pair/ 2>/dev/null || true
+"$BIN/nvpair-engine-manager" --version || true
+
+echo "== SGLang venv + model"
+[ -x "$SGLANG_VENV/bin/python" ] || { echo "missing $SGLANG_VENV (run pair-node-prepare first)"; exit 1; }
+[ -f "$MODEL_PATH/config.json" ] || { echo "missing model at $MODEL_PATH"; exit 1; }
+ln -sfn "$SGLANG_VENV" "$CFG/engine-bin/lmstudio/sglang-venv"     # manifest detect: {install_dir}/sglang-venv/bin/python
+
+echo "== libstdc++ (SGLang's JIT n-gram kernel needs GLIBCXX_3.4.30)"
+L=/root/miniconda3/lib/libstdc++.so.6; S=/usr/lib/x86_64-linux-gnu/libstdc++.so.6
+if [ -e "$L" ] && ! strings "$L" | grep -q GLIBCXX_3.4.30 && strings "$S" | grep -q GLIBCXX_3.4.30; then
+  [ -e "$L.pre-ngram" ] || cp -P "$L" "$L.pre-ngram"; ln -sfn "$S" "$L"; echo "  miniconda libstdc++ → system"
+fi
+
+echo "== engine override → $CFG/engines/lmstudio.json"
+ARGS="[\"-m\",\"sglang.launch_server\",\"--model-path\",\"$MODEL_PATH\",\"--served-model-name\",\"$SERVED\",\"--host\",\"{host}\",\"--port\",\"{port}\",\"--context-length\",\"8192\",\"--mem-fraction-static\",\"0.5\",\"--reasoning-parser\",\"qwen3\""
+[ "$DRAFT" = 1 ] && ARGS="$ARGS,\"--speculative-algorithm\",\"NGRAM\",\"--speculative-num-draft-tokens\",\"8\""
+printf '{"engine":"lmstudio","runtime":{"port":30000,"args":[%s]}}\n' "$ARGS" > "$CFG/engines/lmstudio.json"
+cat "$CFG/engines/lmstudio.json"
+
+echo "== start PAIR broker (pairctl serve on 127.0.0.1:17999)"
+pkill -f "pairctl.py serv[e]" 2>/dev/null || true; pkill -f "nvpair-[u]i-broker" 2>/dev/null || true; sleep 3
+pkill -f "build/bin/nvpair-[a-z-]*" 2>/dev/null || true; pkill -f "build/bin/[ol]*[a-z]*-proxy" 2>/dev/null || true; sleep 1
+cd /root/pair && (setsid nohup bash -lc "python3 /root/pair/pairctl.py serve" > /root/pair/pairctl.log 2>&1 < /dev/null &)
+for _ in $(seq 1 20); do sleep 2; grep -q "app:ready=True" /root/pair/pairctl.log 2>/dev/null && break; done
+tail -1 /root/pair/pairctl.log
+
+echo "== engine:start lmstudio (SGLang, first start compiles kernels: minutes)"
+bash -lc "python3 /root/pair/pairctl.py call engine:start '{\"engine\":\"lmstudio\"}' --timeout 900" | grep -E '"running"|"healthy"|message' | tr -d ' ' | paste -sd ' '
+curl -s -m 5 http://127.0.0.1:30000/v1/models | head -c 200; echo
+echo "== done. From the Mac: bin/tunnel-4090 (TUNNEL_TARGET/TUNNEL_PORT) then PAIR's manual node 127.0.0.1 picks it up."
