@@ -152,8 +152,8 @@ async function refreshPair() {
     for (const n of d.nodes) {
       const el = document.createElement("div"); el.className = "node";
       el.innerHTML = `<span class="dot ${n.online ? "ok" : "bad"}"></span>
-        <div><div class="n">${n.name} <span class="tag">${n.kind === "self" ? "本机" : "远端·手动"}</span></div>
-        <div class="d">${n.address} · ${n.engine} · 模型 ${(n.models || []).join(", ") || "无"} · 任务 ${n.jobs}</div></div>
+        <div><div class="n">${n.name} <span class="tag">${n.kind === "self" ? "本机" : n.kind === "manual" ? "远端·手动" : "集群成员"}</span> <span class="tag" style="${n.in_chain ? "background:#ecfdf5;color:var(--ok)" : "background:#fef3c7;color:var(--warn)"}">${n.in_chain ? "在链路里" : "不在链路里"}</span></div>
+        <div class="d">${n.hw ? n.hw + " · " : ""}${n.address} · ${n.engine} · 模型 ${(n.models || []).join(", ") || "无"} · 任务 ${n.jobs}</div></div>
         <span class="sp"></span>${n.kind === "manual" ? `<button data-name="${n.name}">移除</button>` : ""}`;
       const rm = el.querySelector("button");
       if (rm) rm.onclick = async () => { if (!confirm("移除节点 " + n.name + " 并重启 PAIR？")) return; rm.disabled = true;

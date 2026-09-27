@@ -97,7 +97,7 @@ async function refresh() {
   for (const n of d.pair.nodes) {
     const el = document.createElement("div"); el.className = "node";
     const dr = n.draft || {};
-    el.innerHTML = `<div class="n"><span class="dot ${n.online ? "ok" : "bad"}"></span>${n.name} <span class="tag">${n.kind === "self" ? "本机" : "远端"}</span> <span class="tag off">${n.hw || ""}</span></div>
+    el.innerHTML = `<div class="n"><span class="dot ${n.online ? "ok" : "bad"}"></span>${n.name} <span class="tag">${n.kind === "self" ? "本机" : n.kind === "manual" ? "远端·手动" : "集群成员"}</span> <span class="tag off">${n.hw || ""}</span> <span class="tag ${n.in_chain ? "" : "off"}">${n.in_chain ? "在链路里" : "不在链路里：" + (n.slot === "ollama" ? "引擎在 Ollama 槽位" : "离线")}</span></div>
       <div class="hint">${n.address} · ${n.engine} · 模型 ${(n.models || []).join(", ") || "无"} · 任务 ${n.jobs}</div>
       <div class="chain"><span class="box on">PAIR 代理</span>›<span class="box ${n.online ? "on" : "off"}">${n.engine_kind}</span>›<span class="box ${dr.algorithm ? "on" : "off"}">draft: ${dr.algorithm || "关"}${dr.tokens ? " ×" + dr.tokens : ""}</span>›<span class="box on">${(n.models || [])[0] || "?"}</span></div>
       <div class="hint">${dr.note || ""}</div>`;

@@ -216,44 +216,91 @@ async def _up(url: str) -> bool:
         return False
 
 
+def _discovery() -> list[dict]:
+    """Latest `discovery:nodes-changed` snapshot the PAIR desktop logged: every node PAIR can route to
+    (self, cluster peers over mTLS, manual nodes) with hostUuid, address and models per engine."""
+    log = LOGS / "pair-desktop.log"
+    try:
+        with open(log, "rb") as f:
+            f.seek(0, 2)
+            f.seek(max(0, f.tell() - 3_000_000))
+            tail = f.read().decode("utf-8", "replace")
+    except OSError:
+        return []
+    i = tail.rfind("discovery:nodes-changed [")
+    if i < 0:
+        return []
+    line = tail[i + len("discovery:nodes-changed "):].split("\n", 1)[0]
+    try:
+        return json.loads(line)
+    except ValueError:
+        return []
+
+
+async def _hw(addr: str, port: int) -> str:
+    try:
+        d = (await client.get(f"http://{addr}:{port}/v1/node-info", timeout=3)).json()
+    except (httpx.HTTPError, ValueError):
+        return ""
+    gpus = [g.get("name", "") for g in d.get("GPUs") or d.get("gpus") or []]
+    nv = [g for g in gpus if "NVIDIA" in g]
+    return (nv or gpus or [(d.get("cpu") or {}).get("name", "")])[0]
+
+
+def _ledger():
+    ws = _pair_json("workloads-history.json", [])
+    return ws.get("workloads", ws) if isinstance(ws, dict) else ws
+
+
 @app.get("/api/pair")
 async def pair_status():
     self_id = _pair_json("node-id.json", {}).get("node_uuid", "")
-    manual = _pair_json("configs/manual-nodes.json", [])
-    engine_state = (_pair_json("engine-bin/engine-state.json", {}) or {}).get("engines", {})
-    ws = _pair_json("workloads-history.json", [])
-    ws = ws.get("workloads", ws) if isinstance(ws, dict) else ws
-    names = {self_id: "this-mac"}
-    # a manual node's ledger id is its hostUuid; learn it from the desktop log is fragile, so label by exclusion
+    manual = {m.get("name"): m for m in _pair_json("configs/manual-nodes.json", [])}
+    ws = _ledger()
     counts: dict[str, int] = {}
-    last_seen: dict[str, int] = {}
     for w in ws:
-        sid = w.get("scheduledOn") or ""
-        counts[sid] = counts.get(sid, 0) + 1
-        last_seen[sid] = max(last_seen.get(sid, 0), w.get("createdAt") or 0)
-    # remote ids ordered by most recent job: the live manual node is the one PAIR used last;
-    # stale ids (a peer that left the cluster weeks ago) sort to the back
-    remote_ids = sorted((k for k in counts if k and k != self_id), key=lambda k: -last_seen[k])
-    nodes = [{"name": "this-mac", "kind": "self", "address": "127.0.0.1", "engine": "llama-server (LM slot)",
-              "online": bool(await _models(PAIR_LOCAL_ENGINE)), "models": await _models(PAIR_LOCAL_ENGINE),
-              "jobs": counts.get(self_id, 0),
-              "desired": {k: v for k, v in engine_state.items()}}]
-    for i, m in enumerate(manual):
-        addr = m.get("address", "")
-        eng = f"http://{addr}:{PAIR_REMOTE_ENGINE_PORT}"
-        models = await _models(eng)
-        rid = remote_ids[i] if i < len(remote_ids) else ""
-        if rid:
-            names[rid] = m.get("name", addr)
-        nodes.append({"name": m.get("name", addr), "kind": "manual", "address": addr, "engine": "SGLang (LM slot, tunnelled)",
-                      "online": bool(models) and await _up(f"http://{addr}:{PAIR_REMOTE_NODEINFO_PORT}/"),
-                      "models": models, "jobs": counts.get(rid, 0) if rid else 0})
+        counts[w.get("scheduledOn") or ""] = counts.get(w.get("scheduledOn") or "", 0) + 1
+    lm_models = await _models(PAIR_LM_PROXY)
+    disc = _discovery()
+    nodes, names = [], {}
+    for n in disc:
+        uid = n.get("hostUuid") or n.get("id")
+        is_self = uid == self_id
+        kind = "self" if is_self else "manual" if n.get("name") in manual else "cluster"
+        name = "this-mac" if is_self else n.get("name") or n.get("ipAddress")
+        names[uid] = name
+        by = n.get("modelsByEngine") or {}
+        hw = await _hw("127.0.0.1" if is_self else n.get("ipAddress", ""), n.get("port") or 14318)
+        if is_self:
+            online = bool(await _models(PAIR_LOCAL_ENGINE))
+        else:   # the snapshot is only re-logged on change, so lastSeen goes stale: node-info answering is the signal
+            online = bool(hw) or time.time() - (n.get("lastSeen") or 0) < 120
+        lm = by.get("lmstudio") or []
+        in_chain = online and any(m in lm for m in lm_models)
+        engine = ("llama-server" if is_self else "SGLang" if kind == "manual" else "LM Studio") if lm else \
+                 ("Ollama" if by.get("ollama") else "none")
+        nodes.append({"name": name, "kind": kind, "uuid": uid, "address": n.get("ipAddress", ""),
+                      "engine": engine + (" (LM slot)" if lm else " (Ollama slot)" if by.get("ollama") else ""),
+                      "engine_kind": engine, "slot": "lmstudio" if lm else "ollama" if by.get("ollama") else "",
+                      "online": online, "models": n.get("models") or [], "models_by_engine": by,
+                      "in_chain": in_chain, "jobs": counts.get(uid, 0),
+                      "hw": hw})
+    if not nodes:   # desktop log unavailable: fall back to what we can probe ourselves
+        nodes.append({"name": "this-mac", "kind": "self", "uuid": self_id, "address": "127.0.0.1", "engine": "llama-server (LM slot)",
+                      "engine_kind": "llama-server", "slot": "lmstudio", "online": bool(await _models(PAIR_LOCAL_ENGINE)),
+                      "models": await _models(PAIR_LOCAL_ENGINE), "in_chain": True, "jobs": counts.get(self_id, 0), "hw": ""})
+        names[self_id] = "this-mac"
+        for m in manual.values():
+            ms = await _models(f"http://{m.get('address')}:{PAIR_REMOTE_ENGINE_PORT}")
+            nodes.append({"name": m.get("name"), "kind": "manual", "uuid": "", "address": m.get("address"), "engine": "SGLang (LM slot)",
+                          "engine_kind": "SGLang", "slot": "lmstudio", "online": bool(ms), "models": ms, "in_chain": bool(ms), "jobs": 0, "hw": ""})
+    nodes.sort(key=lambda n: (n["kind"] != "self", n["name"]))
     jobs = [{"time": time.strftime("%H:%M:%S", time.localtime((w.get("createdAt") or 0) / 1000)),
-             "model": w.get("model"), "node": names.get(w.get("scheduledOn", ""), "remote"), "state": w.get("state")}
+             "model": w.get("model"), "node": names.get(w.get("scheduledOn") or "", "?"), "state": w.get("state")}
             for w in ws[-12:]][::-1]
     tunnel_ok = bool(await _models(f"http://127.0.0.1:{PAIR_REMOTE_ENGINE_PORT}"))
-    return {"self_id": self_id, "tunnel_ok": tunnel_ok, "lm_proxy_models": await _models(PAIR_LM_PROXY),
-            "nodes": nodes, "jobs": jobs}
+    return {"self_id": self_id, "tunnel_ok": tunnel_ok, "lm_proxy_models": lm_models,
+            "nodes": nodes, "jobs": jobs, "names": names}
 
 
 def _restart_pair_desktop() -> None:
@@ -359,13 +406,11 @@ async def arch_status():
     # drafts per node
     for n in pair["nodes"]:
         if n["kind"] == "self":
-            n["engine_kind"] = "llama-server"
             n["draft"] = _llama_draft()
-            n["hw"] = "Mac CPU"
-        else:
-            n["engine_kind"] = "SGLang"
+        elif n["engine_kind"] == "SGLang":
             n["draft"] = await _sglang_draft(f"http://{n['address']}:{PAIR_REMOTE_ENGINE_PORT}")
-            n["hw"] = "RTX 4090"
+        else:
+            n["draft"] = {}
     routes_text = _read(STATE / "routes.yaml")
     routes = re.findall(r"^  ([a-z]+):$", routes_text, re.M)
     judge = _yaml_scalar(routes_text, "provider") or ("llm" if "judge:" in routes_text else "")
@@ -374,7 +419,7 @@ async def arch_status():
     for pool in ("strong", "weak"):
         ms = [n["model"] for n in nodes.values() if n["pool"] == pool]
         model = ms[0] if ms else ""
-        holders = [n["name"] for n in pair["nodes"] if model in (n.get("models") or [])]
+        holders = [n["name"] for n in pair["nodes"] if n.get("online") and model in ((n.get("models_by_engine") or {}).get("lmstudio") or n.get("models") or [])]
         pools.append({"pool": pool, "model": model, "holders": holders})
     catalogue = sorted({m for n in pair["nodes"] for m in (n.get("models") or [])} | {p["model"] for p in pools if p["model"]})
     try:
@@ -507,22 +552,8 @@ async def batch_attribute(payload: dict):
         return {"nodes": {}}
     since = min(r["t0"] for r in rows) - 2
     pair = await pair_status()
-    names = {"this-mac": "this-mac"}
-    ws = _pair_json("workloads-history.json", [])
-    ws = ws.get("workloads", ws) if isinstance(ws, dict) else ws
-    self_id = pair["self_id"]
-    remote = {n["name"]: n for n in pair["nodes"] if n["kind"] == "manual"}
-    # resolve remote ids the same way pair_status does: most recent remote id ↔ first manual node
-    ids = {}
-    for w in ws:
-        sid = w.get("scheduledOn") or ""
-        if sid and sid != self_id:
-            ids[sid] = max(ids.get(sid, 0), w.get("createdAt") or 0)
-    remote_ids = sorted(ids, key=lambda k: -ids[k])
-    label = {self_id: "this-mac"}
-    for i, name in enumerate(remote):
-        if i < len(remote_ids):
-            label[remote_ids[i]] = name
+    ws = _ledger()
+    label = pair.get("names") or {}
     entries = sorted((w for w in ws if (w.get("createdAt") or 0) / 1000 >= since), key=lambda w: w.get("createdAt") or 0)
     used, out = set(), {}
     for r in rows:
