@@ -246,3 +246,33 @@ Pi / 本机服务 :7000 ──▶ Switchyard(fork) :4000 ──▶ decider :4100
 PAIR fork 改动（`1034228`）：`lmstudio.json` 加 darwin 平台块，运行时是 `{install_dir}/llama-server -m {install_dir}/model.gguf --alias qwen3-1.7b`（二进制和 GGUF 是放在引擎目录里的符号链接）；`mergeOntoBundled` 让用户覆盖文件的 `runtime` 也压过平台块的 `runtime`（否则带平台运行时的引擎 set-port 存不住）；Mac 端口偏移树同步。Mac 引擎自启状态在 `engine-bin/engine-state.json`（`lmstudio: true, ollama: false`）。
 
 local_infer：`.env` 只剩 `PAIR_PROXY_URL=http://127.0.0.1:11234/v1`，两个池同一个模型。八条并发经 LM 代理：4090 四条、Mac 四条。`tests/links.py`、`tests/manual.sh`、`docs/testing.md` 已按新拓扑改写，七环加整链 PASS。
+
+## 10. 全貌界面、模型库与切换（2026-09-27）
+
+管理台第三页 `http://localhost:6006/arch`（首页"🗺️ 架构全貌"）。上排五格是一条请求走过的组件，颜色标出每一格是**复用原样**（Pi、本机服务）、**fork 改动**（Switchyard 判定器接口、PAIR 的 LM 槽位与总览）还是**我们自己的**（决策器、引擎与 draft 的编排），每格带活的状态和关键参数。中间是节点卡片：PAIR 代理 → 引擎 → draft → 模型，draft 那一格从 SGLang 的 `/get_server_info` 或 llama-server 的覆盖文件里读，开着就亮。下面是模型库：Switchyard 两个池各绑一个模型，列出 PAIR 名单里持有该模型的节点，可以切换（写 `.env` 的 `PAIR_STRONG_MODEL` / `PAIR_WEAK_MODEL`，重跑 `cluster init` 重建路由）。现在只有一个模型类型，两个池同模型；第三台机器带别的模型进来后这里就有得选，弱池强池各绑一个。
+
+## 11. RL 搭在哪里
+
+链路是 Switchyard → 决策器 → PAIR → 引擎。Switchyard 每轮把 `DecisionState` 发给决策器，拿回 `Decision` 就照办；PAIR 和引擎看不见决策。所以 RL 只能也只需要搭在**决策器**这一格，作为它的第四个后端：`decider/rl.py`（`--backend rl`，或 `DECIDER_BACKEND=rl bin/cluster init`）。没有策略文件时它退回规则后端并标记 `provider=rl`，链路不断；有策略文件（`decider/policy.json`）时按特征做 softmax 出三档概率。特征在 `features()` 里，训练和服务共用同一段代码。
+
+数据从 Switchyard 已经在写的 RL 轨迹来：`logs/rl/*.json`，fork 在每条里加了 `decision`（决策器说的）和 `served_tier`（实际谁服务的）。`python3 -m decider.train_rl` 把它们变成 `logs/rl-dataset.jsonl`（今天 112 行）；`--labels x.jsonl --fit` 用每条的奖励拟合一个逐层的逻辑回归，写出策略文件。**缺的是奖励**：轨迹里没有质量信号，需要用户采纳、任务成功或延迟预算这样的标签器（`tools/rl/label.py` 待写）。Switchyard 的 ε 探索（`judge.explore_epsilon`）已经在攒反事实样本，这是后面能做离线策略评估的前提。这是一个上下文赌博机的起点，不是完整的 RL 闭环；对路由问题够用。
+
+## 12. 投机解码怎么接在 SGLang 后面，依赖是什么
+
+draft **不是一个独立服务**，是服务目标模型的那个引擎进程的启动参数：引擎自己跑 draft，猜 k 个 token，用目标模型一次前向验证，保留接受的前缀。贪心解码下输出逐位相同，只有速度变。所以 Switchyard、决策器、PAIR 全都不用知道 draft 的存在，改的只有引擎的启动参数，也就是 PAIR 的 manifest 或每节点的覆盖文件。
+
+依赖链按顺序：基座模型 → 引擎构建（4090 上 SGLang 0.5.20，Mac 上 llama.cpp b10819）→ 该引擎支持的 draft 种类 → 和**这个**基座兼容的 draft 制品。EAGLE-3 头绑定基座的隐层维度和分词器，换基座就要换头；n-gram draft 没有制品，只有语料；独立小模型 draft 要同分词器。三种都登记在 `cluster/inference/drafts.yaml`，按基座模型 × 引擎写 draft、参数、实测。
+
+实测（2026-09-27，temperature 0，256 或 160 token 的代码类回答）：
+
+| 引擎 | 无 draft | n-gram draft ×8 | 备注 |
+|---|---|---|---|
+| 4090 SGLang，三条新提示 | 223 / 227 / 230 tok/s | 195 / 175 / 184 tok/s | 新文本上略慢，draft 开销大于接受收益 |
+| 4090 SGLang，重复提示 | 228 tok/s | 907 tok/s | 接受率接近 1，四倍 |
+| Mac llama-server | 14.0 / 14.3 tok/s | 15.2 / 15.4 tok/s | CPU 上 +8% |
+
+结论：n-gram draft 对重复内容（回显代码、工具输出、harness 循环）是四倍收益，对新文本是零到负；1.7B 这么小的目标模型在 4090 上解码已经很快，训练好的 EAGLE-3 头在这里收益有限，它该用在强池的 32B 上。两个坑：SGLang 现场编译 n-gram 内核要 `GLIBCXX_3.4.30`，AutoDL 镜像里 miniconda 的 libstdc++ 太旧，把它指向系统的即可；PAIR 引擎管理器的覆盖文件支持 `runtime.env`，但这次用了库替换而不是环境变量。两台现在都开着 n-gram draft，架构页上能看到。
+
+## 13. 领域 draft
+
+最便宜的领域 draft 就是 n-gram 语料：SGLang 的 `--speculative-ngram-external-corpus-path` 吃一个文本文件，把我们 harness 真实产出的文本（工具输出、代码、日志，从 `logs/rl` 抽）喂进去，不训练，每晚重建。第二步才是领域 EAGLE-3 头：用 SpecForge 在同一批轨迹上在线蒸馏，提升"新的但在领域内"的文本的接受率，目标是强池的大模型。两步都不改 Switchyard、决策器、PAIR，只改引擎参数和制品。

@@ -112,6 +112,9 @@ def build(args) -> object:
         return JevBackend(args.jev_url, os.environ.get("TYPESAFE_API_KEY", ""), args.jev_model)
     if args.backend == "anyjev":
         return AnyJevBackend(args.model)
+    if args.backend == "rl":
+        from .rl import RLBackend   # the learned router lives here; rules fallback until a policy is trained
+        return RLBackend()
     raise SystemExit(f"unknown backend {args.backend}")
 
 
@@ -159,7 +162,7 @@ class Handler(BaseHTTPRequestHandler):
 
 def main(argv=None) -> int:
     p = argparse.ArgumentParser(prog="decider", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    p.add_argument("--backend", default=os.environ.get("DECIDER_BACKEND", "rules"), choices=["rules", "anyjev", "jev"])
+    p.add_argument("--backend", default=os.environ.get("DECIDER_BACKEND", "rules"), choices=["rules", "anyjev", "jev", "rl"])
     p.add_argument("--port", type=int, default=int(os.environ.get("DECIDER_PORT", "4100")))
     p.add_argument("--model", default="Qwen/Qwen3-1.7B", help="anyjev: HF model id or local path")
     p.add_argument("--jev-url", default="https://openrouter.ai/api")

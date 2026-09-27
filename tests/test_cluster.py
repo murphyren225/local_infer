@@ -195,3 +195,23 @@ def test_judge_from_decider_file(state, monkeypatch):
     routes.DECIDER_FILE.write_text("http://127.0.0.1:4100")
     j = routes.judge_from_env()
     assert j.provider == "http" and j.url == "http://127.0.0.1:4100"
+
+
+def test_decider_rl_backend(tmp_path, monkeypatch):
+    """RL slot: no policy → rules fallback tagged rl; a policy file → softmax over features()."""
+    import json
+    from decider import rl
+    state = {"session": "t", "turn": 1, "task_type": "code", "summary": "prove this race condition fix",
+             "first_user_text": "prove this race condition fix"}
+    b = rl.RLBackend(tmp_path / "missing.json")
+    d = b.decide(state)
+    assert d["provider"] == "rl" and abs(sum(d["route"].values()) - 1) < 1e-6 and "fallback" in d["reason"]
+    pol = {"version": "t", "features": list(rl.FEATURES),
+           "weights": {"strong": [0.0] * len(rl.FEATURES), "cloud": [0.0] * len(rl.FEATURES)},
+           "bias": {"strong": 5.0, "cloud": -5.0}}
+    (tmp_path / "policy.json").write_text(json.dumps(pol))
+    d = rl.RLBackend(tmp_path / "policy.json").decide(state)
+    assert d["route"]["strong"] > 0.95 and d["task_type"] == "code" and d["reason"].startswith("rl policy")
+    bad = dict(pol, features=["x"])
+    (tmp_path / "bad.json").write_text(json.dumps(bad))
+    assert rl.RLBackend(tmp_path / "bad.json").policy is None   # feature-set mismatch refuses the policy

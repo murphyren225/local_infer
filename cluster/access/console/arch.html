@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>架构全貌</title>
+<style>
+  :root { --bg:#f5f6f8; --card:#fff; --line:#e3e6ea; --text:#1c2330; --muted:#6b7686;
+          --accent:#2563eb; --ok:#16a34a; --bad:#dc2626; --warn:#d97706; --idle:#c3c9d2; --ours:#7c3aed; }
+  * { box-sizing:border-box; }
+  body { margin:0; font:14px/1.6 -apple-system,"Segoe UI",sans-serif; background:var(--bg); color:var(--text); }
+  header { display:flex; align-items:center; gap:14px; padding:10px 18px; background:var(--card); border-bottom:1px solid var(--line); position:sticky; top:0; z-index:2; }
+  header h1 { font-size:16px; margin:0; } header a { color:var(--muted); font-size:13px; text-decoration:none; }
+  header .sp { flex:1; } .legend { font-size:12px; color:var(--muted); display:flex; gap:12px; }
+  .legend i { display:inline-block; width:10px; height:10px; border-radius:2px; vertical-align:middle; margin-right:4px; }
+  main { padding:18px; max-width:1500px; margin:0 auto; }
+  h2 { font-size:14px; color:var(--muted); margin:22px 0 10px; }
+  .stage-row { display:grid; grid-template-columns:repeat(5, minmax(0,1fr)); gap:12px; align-items:stretch; }
+  @media (max-width:1100px) { .stage-row { grid-template-columns:repeat(2, minmax(0,1fr)); } }
+  .stage { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:12px 14px; position:relative; border-top:4px solid var(--idle); }
+  .stage.reuse { border-top-color:#94a3b8; } .stage.ours { border-top-color:var(--ours); } .stage.fork { border-top-color:var(--accent); }
+  .stage .k { font-size:11px; color:var(--muted); letter-spacing:.06em; }
+  .stage .n { font-weight:600; display:flex; align-items:center; gap:8px; margin:2px 0 4px; }
+  .stage .d { font-size:12px; color:var(--muted); }
+  .stage .kv { font-size:12px; margin-top:8px; border-top:1px dashed var(--line); padding-top:6px; }
+  .stage .kv div { display:flex; justify-content:space-between; gap:8px; }
+  .stage .kv b { font-weight:500; color:var(--muted); }
+  .dot { display:inline-block; width:10px; height:10px; border-radius:50%; background:var(--idle); flex:none; }
+  .dot.ok { background:var(--ok); } .dot.bad { background:var(--bad); } .dot.warn { background:var(--warn); }
+  .arrow { position:absolute; right:-13px; top:44%; color:var(--idle); font-size:18px; z-index:1; }
+  .nodes { display:grid; grid-template-columns:repeat(auto-fill, minmax(300px,1fr)); gap:12px; }
+  .node { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:12px 14px; }
+  .node .n { font-weight:600; display:flex; align-items:center; gap:8px; }
+  .tag { font-size:11px; padding:1px 8px; border-radius:99px; background:#eef2ff; color:var(--accent); }
+  .tag.ours { background:#f3e8ff; color:var(--ours); } .tag.off { background:#f1f5f9; color:var(--muted); }
+  .chain { display:flex; align-items:center; gap:6px; margin-top:8px; font-size:12px; flex-wrap:wrap; }
+  .chain .box { border:1px solid var(--line); border-radius:8px; padding:3px 8px; background:var(--bg); }
+  .chain .box.on { border-color:var(--ok); } .chain .box.off { color:var(--muted); border-style:dashed; }
+  table { width:100%; border-collapse:collapse; font-size:12px; background:var(--card); border:1px solid var(--line); border-radius:12px; overflow:hidden; }
+  td, th { text-align:left; padding:6px 10px; border-top:1px solid var(--line); } th { color:var(--muted); font-weight:500; border-top:0; background:var(--bg); }
+  select, button { font:inherit; border-radius:8px; border:1px solid var(--line); background:var(--card); padding:4px 8px; }
+  button.primary { background:var(--accent); color:#fff; border-color:var(--accent); }
+  .hint { font-size:12px; color:var(--muted); margin-top:6px; }
+  .toast { position:fixed; bottom:18px; left:50%; transform:translateX(-50%); background:var(--text); color:#fff; padding:8px 14px; border-radius:10px; font-size:13px; display:none; }
+</style>
+</head>
+<body>
+<header>
+  <h1>🗺️ 架构全貌</h1>
+  <a href="/">← 集群管理台</a> <a href="/links">🔗 链路总览</a>
+  <span class="sp"></span>
+  <span class="legend"><span><i style="background:#94a3b8"></i>复用原样</span><span><i style="background:var(--accent)"></i>fork 改动</span><span><i style="background:var(--ours)"></i>我们自己的</span></span>
+</header>
+<main>
+  <h2>一条请求走的路（每一格是一个组件；颜色说明它是复用的、fork 改的、还是我们自己写的）</h2>
+  <div class="stage-row" id="stages"></div>
+
+  <h2>节点与引擎（PAIR 在这些节点之间选硬件；引擎后面那一格是 draft，投机解码）</h2>
+  <div class="nodes" id="nodes"></div>
+
+  <h2>模型库与池绑定（Switchyard 的两个池各绑一个模型；PAIR 名单里有这个模型的节点都是候选）</h2>
+  <table>
+    <thead><tr><th>池</th><th>当前模型</th><th>持有该模型的节点</th><th>切换</th></tr></thead>
+    <tbody id="pools"></tbody>
+  </table>
+  <div class="hint">切换会改 <code>.env</code> 里的 <code>PAIR_STRONG_MODEL</code> / <code>PAIR_WEAK_MODEL</code> 并重建路由表（几秒）。现在只有一个模型类型，两个池同模型；第三台机器带别的模型进来后这里就有得选。</div>
+
+  <h2>决策与训练数据（RL 搭在这里）</h2>
+  <div class="nodes" id="rl"></div>
+</main>
+<div class="toast" id="toast"></div>
+<script>
+function toast(m) { const t = document.getElementById("toast"); t.textContent = m; t.style.display = "block"; setTimeout(() => t.style.display = "none", 4000); }
+function stage(s) {
+  const el = document.createElement("div"); el.className = "stage " + s.kind;
+  el.innerHTML = `<div class="k">${s.k}</div><div class="n"><span class="dot ${s.ok === null ? "" : s.ok ? "ok" : "bad"}"></span>${s.name}</div>
+    <div class="d">${s.desc}</div><div class="kv">${(s.kv || []).map(([a, b]) => `<div><b>${a}</b><span>${b}</span></div>`).join("")}</div>${s.last ? "" : '<span class="arrow">›</span>'}`;
+  return el;
+}
+async function refresh() {
+  const d = await (await fetch("/api/arch")).json();
+  const st = document.getElementById("stages"); st.innerHTML = "";
+  const S = [
+    {k:"个人端", name:"Pi + 本机服务 :7000", kind:"reuse", ok:d.client.ok, desc:"复用：Pi harness、本机服务。补会话 ID、透传 x-task-type。",
+     kv:[["hub", d.client.hub || "?"]]},
+    {k:"选模型", name:"Switchyard :4000", kind:"fork", ok:d.gateway.ok, desc:"fork：判定器换成可插拔的决策器接口；RL 轨迹里多记 decision 与 served_tier。",
+     kv:[["模式", d.gateway.mode], ["路由", (d.gateway.routes || []).join(" ")], ["判定", d.gateway.judge || "?"]]},
+    {k:"出决策", name:"决策器 :4100", kind:"ours", ok:d.decider.ok, desc:"我们的：规则 / Jev / AnyJev / RL 四个后端同一接口。RL 策略就装在这里。",
+     kv:[["后端", d.decider.backend || "?"], ["决定数", d.decider.decisions]]},
+    {k:"选硬件", name:"PAIR LM 槽位代理 :11234", kind:"fork", ok:d.pair.ok, desc:"fork：LM 槽位换成 SGLang / llama-server；总览画手动节点；覆盖文件压过平台块。",
+     kv:[["名单", (d.pair.models || []).join(", ") || "空"], ["节点", d.pair.nodes.length], ["隧道", d.pair.tunnel_ok ? "在" : "断"]]},
+    {k:"推理", name:"引擎 + draft", kind:"ours", ok:d.pair.nodes.some(n => n.online), last:true, desc:"我们的：SGLang（4090）/ llama-server（Mac）由 PAIR 拉起；draft 是引擎的启动参数，不是独立服务。",
+     kv:d.pair.nodes.map(n => [n.name, (n.draft && n.draft.algorithm) ? "draft " + n.draft.algorithm : "no draft"])},
+  ];
+  S.forEach(s => st.appendChild(stage(s)));
+  const nodes = document.getElementById("nodes"); nodes.innerHTML = "";
+  for (const n of d.pair.nodes) {
+    const el = document.createElement("div"); el.className = "node";
+    const dr = n.draft || {};
+    el.innerHTML = `<div class="n"><span class="dot ${n.online ? "ok" : "bad"}"></span>${n.name} <span class="tag">${n.kind === "self" ? "本机" : "远端"}</span> <span class="tag off">${n.hw || ""}</span></div>
+      <div class="hint">${n.address} · ${n.engine} · 模型 ${(n.models || []).join(", ") || "无"} · 任务 ${n.jobs}</div>
+      <div class="chain"><span class="box on">PAIR 代理</span>›<span class="box ${n.online ? "on" : "off"}">${n.engine_kind}</span>›<span class="box ${dr.algorithm ? "on" : "off"}">draft: ${dr.algorithm || "关"}${dr.tokens ? " ×" + dr.tokens : ""}</span>›<span class="box on">${(n.models || [])[0] || "?"}</span></div>
+      <div class="hint">${dr.note || ""}</div>`;
+    nodes.appendChild(el);
+  }
+  const pools = document.getElementById("pools"); pools.innerHTML = "";
+  for (const p of d.pools) {
+    const tr = document.createElement("tr");
+    const opts = d.catalogue.map(m => `<option ${m === p.model ? "selected" : ""}>${m}</option>`).join("");
+    tr.innerHTML = `<td>${p.pool}</td><td><b>${p.model}</b></td><td>${(p.holders || []).join(", ") || "—"}</td>
+      <td><select data-pool="${p.pool}">${opts}</select> <button class="primary" data-pool="${p.pool}">应用</button></td>`;
+    tr.querySelector("button").onclick = async ev => {
+      const model = tr.querySelector("select").value; ev.target.disabled = true;
+      const r = await (await fetch("/api/models/bind", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({pool:p.pool, model})})).json();
+      ev.target.disabled = false; toast(r.error || `${p.pool} → ${model}，路由已重建`); refresh();
+    };
+    pools.appendChild(tr);
+  }
+  const rl = document.getElementById("rl"); rl.innerHTML = "";
+  const cards = [
+    ["决策器后端", `<b>${d.decider.backend || "?"}</b><div class="hint">切换：<code>DECIDER_BACKEND=rl bin/cluster init</code>。RL 后端没有策略文件时退回规则，链路不断。</div>`],
+    ["训练数据", `RL 轨迹 <b>${d.rl.traces}</b> 条（logs/rl），决策日志 <b>${d.decider.decisions}</b> 行，数据集 <b>${d.rl.dataset_rows}</b> 行<div class="hint">建数据集：<code>python3 -m decider.train_rl</code>；有标签后 <code>--labels … --fit</code> 生成 decider/policy.json。</div>`],
+    ["策略文件", d.rl.policy ? `<b>${d.rl.policy.version}</b>，训练样本 ${d.rl.policy.trained_on}` : `<span class="tag off">未训练</span><div class="hint">缺的是奖励信号：用户采纳 / 任务成功 / 延迟预算。ε 探索（judge.explore_epsilon）已在攒反事实数据。</div>`],
+    ["Draft 注册表", `${(d.drafts || []).map(x => `<div>${x}</div>`).join("") || "—"}<div class="hint">cluster/inference/drafts.yaml：按基座模型 × 引擎登记 draft 与实测。</div>`],
+  ];
+  for (const [t, body] of cards) { const el = document.createElement("div"); el.className = "node"; el.innerHTML = `<div class="n">${t}</div><div style="margin-top:6px">${body}</div>`; rl.appendChild(el); }
+}
+refresh(); setInterval(refresh, 15000);
+</script>
+</body>
+</html>

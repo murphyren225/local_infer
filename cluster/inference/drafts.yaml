@@ -1,0 +1,63 @@
+# Speculative-decoding drafts: what can sit "after" an engine, per base model and per engine.
+#
+# A draft is never a separate service. It is a launch-time option of the engine process that
+# serves the target model: the engine runs the draft, proposes k tokens, verifies them with the
+# target in one forward pass, and keeps the accepted prefix. Output is bit-identical to no draft
+# (greedy) — only speed changes. So Switchyard, the decider and PAIR are unaware of drafts;
+# the engine manifest / preset is the only place that changes (docs/pipeline-design.md §12).
+#
+# Dependencies, in order:
+#   base model → engine build (SGLang 0.5.20 on the 4090, llama.cpp b10819 on the Mac)
+#             → draft kind supported by that engine → draft artefact compatible with THAT base model
+#   (a trained head such as EAGLE-3 is tied to one base model's hidden size and tokenizer;
+#    an n-gram draft has no artefact, only a corpus; a standalone draft model needs the same tokenizer.)
+#
+# Status column: measured = numbers from tests on our machines; candidate = flags verified, artefact not fetched.
+
+kinds:
+  ngram:
+    what: "Draft from n-gram matches in the request's own context (and, on SGLang, an external corpus). No model, no training."
+    pays_off: "Repetitive output: re-emitted code/log text, tool outputs echoed back, harness loops. Not on novel prose."
+    sglang: "--speculative-algorithm NGRAM --speculative-num-draft-tokens 8  (+ --speculative-ngram-external-corpus-path <text>)"
+    llama_cpp: "--spec-type ngram-simple --spec-draft-n-max 8   (ngram-map-k / ngram-mod / ngram-cache variants)"
+  eagle3:
+    what: "Trained draft head reading the target's hidden states (EAGLE-3). Highest acceptance on novel text."
+    pays_off: "Large targets (32B-class) where a verify step is cheap relative to decode; marginal on a 1.7B target on a 4090."
+    sglang: "--speculative-algorithm EAGLE3 --speculative-draft-model-path <head> --speculative-num-steps 3 --speculative-eagle-topk 1 --speculative-num-draft-tokens 4"
+    llama_cpp: "--spec-type draft-eagle3 --spec-draft-model <head.gguf>"
+    train: "SpecForge (sgl-project/SpecForge): online distillation on our own traces (logs/rl/*.json messages) → domain head"
+  standalone:
+    what: "A small model of the same family drafts for the big one (e.g. Qwen3-0.6B for Qwen3-32B)."
+    sglang: "--speculative-algorithm STANDALONE --speculative-draft-model-path <small model>"
+    llama_cpp: "--spec-type draft-simple --spec-draft-model <small.gguf>"
+
+# Per base model: which draft to use where. Keys match the served model name Switchyard/PAIR route on.
+models:
+  qwen3-1.7b:
+    base: Qwen/Qwen3-1.7B
+    4090-sglang:
+      draft: ngram
+      status: measured
+      evidence: "2026-09-27 A/B, 256-token code answers, temperature 0: no draft 223/227/230 tok/s; NGRAM 195/175/184 tok/s on novel prompts, 907 tok/s on a repeated prompt (vs 228 without). Net: neutral on fresh text, 4x on repeats."
+      note: "SGLang JIT-compiles the n-gram kernel; needs libstdc++ with GLIBCXX_3.4.30. AutoDL's miniconda ships an older one, so /root/miniconda3/lib/libstdc++.so.6 now symlinks the system library (original kept as .pre-ngram). Set via the PAIR override file engines/lmstudio.json on the box."
+    mac-llama-cpp:
+      draft: ngram
+      status: measured
+      evidence: "2026-09-27, 160-token code answer, CPU i9-9880H: no draft 14.0/14.3 tok/s; ngram-simple ×8: 15.2/15.4 tok/s (+8%). Set via the PAIR override file engines/lmstudio.json."
+    eagle3-head:
+      status: candidate
+      artefact: "AngelSlim/Qwen3-1.7B_eagle3 (HF; AutoDL cannot reach HF — mirror via ModelScope or scp)"
+  qwen3-32b-awq:
+    base: Qwen/Qwen3-32B-AWQ
+    4090-sglang:
+      draft: eagle3
+      status: candidate
+      artefact: "AngelSlim/Qwen3-32B_eagle3"
+      why: "the strong pool is where a trained head pays: 32B decode is memory-bound, verifying 4 draft tokens costs about one decode step"
+
+# Domain drafts (b): the cheapest domain-specific draft is the n-gram corpus — feed SGLang the text our
+# harness actually produces (tool outputs, code, logs) via --speculative-ngram-external-corpus-path; no
+# training, refreshable nightly from logs/rl. The second step is a domain EAGLE-3 head trained with
+# SpecForge on the same traces, which lifts acceptance on novel-but-in-domain text.
+corpus:
+  build: "python3 -m decider.train_rl builds logs/rl-dataset.jsonl; tools/drafts/corpus.py (to write) concatenates assistant/tool text into logs/ngram-corpus.txt"
