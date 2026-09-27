@@ -276,3 +276,16 @@ draft **不是一个独立服务**，是服务目标模型的那个引擎进程�
 ## 13. 领域 draft
 
 最便宜的领域 draft 就是 n-gram 语料：SGLang 的 `--speculative-ngram-external-corpus-path` 吃一个文本文件，把我们 harness 真实产出的文本（工具输出、代码、日志，从 `logs/rl` 抽）喂进去，不训练，每晚重建。第二步才是领域 EAGLE-3 头：用 SpecForge 在同一批轨迹上在线蒸馏，提升"新的但在领域内"的文本的接受率，目标是强池的大模型。两步都不改 Switchyard、决策器、PAIR，只改引擎参数和制品。
+
+### 9.2 换一台远端机器 / 新接一台 CUDA 节点
+
+远端节点上只需要 PAIR（fork 的 linux 二进制 + 无头驱动 `pairctl.py`）和 LM 槽位里的 SGLang，Switchyard 和决策器都在 Mac 上，不用装。步骤，对任意一台 Linux + CUDA 的新机器：
+
+1. Mac 上 `ssh-copy-id` 装公钥；`cd ~/pair/Personal-AI-Router/services && GOOS=linux GOARCH=amd64 CGO_ENABLED=0 ./build.sh` 交叉编译 fork 二进制。
+2. 把 `services/build/bin/*`、`~/pair/pairctl.py`、`taillog.py`、`bin/pair-node-setup` scp 到节点的 `/root/node-kit/`。
+3. 节点上装 SGLang（`python3 -m venv /root/autodl-tmp/sglang-venv && pip install 'sglang[all]'`）、下模型（AutoDL 到不了 HF，用 `modelscope download --model Qwen/Qwen3-1.7B --local_dir /root/autodl-tmp/models/Qwen3-1.7B`）。这两步最慢，各几分钟到十几分钟。
+4. 节点上 `bash /root/node-kit/pair-node-setup`：放二进制、把 venv 符号链接进 PAIR 引擎目录、修 libstdc++、写引擎覆盖文件（模型路径、服务名、n-gram draft）、起 PAIR broker、`engine:start`。
+5. Mac 上 `TUNNEL_TARGET=root@<host> TUNNEL_PORT=<port> bin/tunnel-4090 &`（或改脚本默认值）。Mac 的 PAIR 手动节点仍然是 `127.0.0.1`，隧道换了它探到的就是新机器；节点 UUID 会变，账本里旧记录还指旧 UUID。
+6. `python3 tests/links.py all`。
+
+2026-09-27 换到 `connect.westc.seetacloud.com:34821` 就是这么做的。
