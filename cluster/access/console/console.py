@@ -437,5 +437,104 @@ async def bind_pool(payload: dict):
     return {"pool": pool, "model": model, "ok": ok, "output": (p.stdout + p.stderr)[-800:]}
 
 
+# ---------------------------------------------------------------- batch: N prompts in, N results + where each went
+
+LOCAL_SERVICE = os.environ.get("CLIENT_LOCAL_URL", "http://127.0.0.1:7000/v1")
+
+
+@app.get("/batch", response_class=HTMLResponse)
+def batch_page() -> str:
+    return (Path(__file__).parent / "batch.html").read_text(encoding="utf-8")
+
+
+def _trace_for(tag: str, since: float) -> dict:
+    """Switchyard writes one RL trace per request; the prompt carries a unique tag, so the trace
+    whose messages contain it tells us the served tier and the decider's route for that request."""
+    rl = LOGS / "rl"
+    if not rl.exists():
+        return {}
+    for p in sorted(rl.glob("*.json"), key=lambda q: q.stat().st_mtime, reverse=True):
+        if p.stat().st_mtime < since - 2:
+            break
+        try:
+            t = json.loads(p.read_text())
+        except ValueError:
+            continue
+        if any(tag in str(m.get("content", "")) for m in t.get("messages", []) if m.get("role") == "user"):
+            dec = t.get("decision") or {}
+            return {"tier": t.get("served_tier"), "route": dec.get("route"), "task_type": dec.get("task_type")}
+    return {}
+
+
+@app.post("/api/batch/one")
+async def batch_one(payload: dict):
+    prompt = str(payload.get("prompt", ""))[:4000]
+    model = str(payload.get("model", "auto"))
+    if model not in ("auto", "small", "large", "cloud"):
+        return JSONResponse({"error": "model must be auto|small|large|cloud"}, status_code=400)
+    headers = {"Content-Type": "application/json"}
+    if payload.get("task_type"):
+        headers["x-task-type"] = str(payload["task_type"])[:20]
+    if payload.get("session"):
+        headers["x-switchyard-session-id"] = str(payload["session"])[:80]
+    body = {"model": model, "messages": [{"role": "user", "content": prompt}],
+            "max_tokens": int(payload.get("max_tokens") or 120),
+            "chat_template_kwargs": {"enable_thinking": False}, "reasoning_effort": "none"}
+    base = LOCAL_SERVICE if payload.get("via_local", True) else ROUTER
+    t0 = time.time()
+    try:
+        r = await client.post(f"{base}/chat/completions", json=body, headers=headers)
+        d = r.json()
+    except (httpx.HTTPError, ValueError) as exc:
+        return {"error": f"{type(exc).__name__}: {exc}"[:200], "t0": t0, "t1": time.time()}
+    t1 = time.time()
+    if r.status_code != 200 or not isinstance(d, dict) or not d.get("choices"):
+        return {"error": f"http {r.status_code}: {str(d)[:160]}", "t0": t0, "t1": t1}
+    msg = d["choices"][0]["message"]
+    tag = prompt.split("]", 1)[0].lstrip("[") if prompt.startswith("[") else ""
+    trace = _trace_for(tag, t0) if tag else {}
+    return {"model": d.get("model"), "content": msg.get("content") or msg.get("reasoning") or "",
+            "tokens": (d.get("usage") or {}).get("completion_tokens"), "latency_ms": round((t1 - t0) * 1000),
+            "t0": t0, "t1": t1, "tier": trace.get("tier"), "route": trace.get("route")}
+
+
+@app.post("/api/batch/attribute")
+async def batch_attribute(payload: dict):
+    """Map each request's [t0, t1] window to a PAIR ledger entry (createdAt inside the window), earliest
+    unclaimed first. Concurrent bursts can still mismatch a pair — the page says so."""
+    rows = sorted((r for r in payload.get("rows", []) if r.get("t0")), key=lambda r: r["t0"])
+    if not rows:
+        return {"nodes": {}}
+    since = min(r["t0"] for r in rows) - 2
+    pair = await pair_status()
+    names = {"this-mac": "this-mac"}
+    ws = _pair_json("workloads-history.json", [])
+    ws = ws.get("workloads", ws) if isinstance(ws, dict) else ws
+    self_id = pair["self_id"]
+    remote = {n["name"]: n for n in pair["nodes"] if n["kind"] == "manual"}
+    # resolve remote ids the same way pair_status does: most recent remote id ↔ first manual node
+    ids = {}
+    for w in ws:
+        sid = w.get("scheduledOn") or ""
+        if sid and sid != self_id:
+            ids[sid] = max(ids.get(sid, 0), w.get("createdAt") or 0)
+    remote_ids = sorted(ids, key=lambda k: -ids[k])
+    label = {self_id: "this-mac"}
+    for i, name in enumerate(remote):
+        if i < len(remote_ids):
+            label[remote_ids[i]] = name
+    entries = sorted((w for w in ws if (w.get("createdAt") or 0) / 1000 >= since), key=lambda w: w.get("createdAt") or 0)
+    used, out = set(), {}
+    for r in rows:
+        for w in entries:
+            c = (w.get("createdAt") or 0) / 1000
+            if id(w) in used or c < r["t0"] - 1.5 or c > (r.get("t1") or r["t0"]) + 1.5:
+                continue
+            used.add(id(w))
+            out[r["i"]] = label.get(w.get("scheduledOn") or "", "remote")
+            break
+    return {"nodes": out, "ledger_entries": len(entries)}
+
+
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=PORT, log_level="warning")

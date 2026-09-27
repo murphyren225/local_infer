@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>批量测试</title>
+<style>
+  :root { --bg:#f5f6f8; --card:#fff; --line:#e3e6ea; --text:#1c2330; --muted:#6b7686;
+          --accent:#2563eb; --ok:#16a34a; --bad:#dc2626; --warn:#d97706; --idle:#c3c9d2; }
+  * { box-sizing:border-box; }
+  body { margin:0; font:14px/1.6 -apple-system,"Segoe UI",sans-serif; background:var(--bg); color:var(--text); }
+  header { display:flex; align-items:center; gap:14px; padding:10px 18px; background:var(--card); border-bottom:1px solid var(--line); position:sticky; top:0; z-index:2; }
+  header h1 { font-size:16px; margin:0; } header a { color:var(--muted); font-size:13px; text-decoration:none; } header .sp { flex:1; }
+  main { padding:18px; max-width:1500px; margin:0 auto; }
+  .panel { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:12px 14px; }
+  textarea { width:100%; min-height:150px; font:13px/1.5 ui-monospace,Menlo,monospace; border:1px solid var(--line); border-radius:10px; padding:10px; resize:vertical; }
+  .row { display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-top:10px; }
+  select, input, button { font:inherit; border-radius:8px; border:1px solid var(--line); background:var(--card); padding:6px 10px; }
+  input[type=number] { width:70px; }
+  button.primary { background:var(--accent); color:#fff; border-color:var(--accent); font-weight:600; }
+  button:disabled { opacity:.5; cursor:wait; }
+  label { font-size:13px; color:var(--muted); }
+  .sum { font-size:13px; color:var(--muted); margin-left:auto; }
+  table { width:100%; border-collapse:collapse; font-size:13px; background:var(--card); border:1px solid var(--line); border-radius:12px; overflow:hidden; margin-top:14px; }
+  th, td { text-align:left; padding:7px 10px; border-top:1px solid var(--line); vertical-align:top; }
+  th { background:var(--bg); color:var(--muted); font-weight:500; border-top:0; white-space:nowrap; }
+  td.p { max-width:320px; }
+  td.a { max-width:420px; color:var(--muted); cursor:pointer; }
+  td.a.open { white-space:pre-wrap; color:var(--text); }
+  .st { display:inline-flex; align-items:center; gap:6px; white-space:nowrap; }
+  .dot { display:inline-block; width:9px; height:9px; border-radius:50%; background:var(--idle); }
+  .dot.run { background:var(--warn); animation:blink 1s infinite; } .dot.ok { background:var(--ok); } .dot.bad { background:var(--bad); }
+  @keyframes blink { 50% { opacity:.3; } }
+  .tag { font-size:11px; padding:1px 8px; border-radius:99px; background:#eef2ff; color:var(--accent); white-space:nowrap; }
+  .tag.node { background:#ecfdf5; color:var(--ok); } .tag.weak { background:#f1f5f9; color:var(--muted); } .tag.strong { background:#f3e8ff; color:#7c3aed; }
+  .hint { font-size:12px; color:var(--muted); margin-top:6px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>📨 批量测试</h1>
+  <a href="/">← 集群管理台</a> <a href="/links">🔗 链路总览</a> <a href="/arch">🗺️ 架构全貌</a>
+</header>
+<main>
+  <div class="panel">
+    <textarea id="prompts" placeholder="一行一句话。空行忽略。">Reply with exactly: one
+Write a Python function that parses a CSV file into a list of dicts.
+Explain how a hash map handles collisions in three sentences.
+Debug this race condition in the connection pool and prove the fix is correct.
+Translate "good morning" into French, German and Japanese.
+Refactor: for i in range(len(xs)): if xs[i] % 2 == 0: out.append(xs[i]*2)
+Summarize what speculative decoding does in two sentences.
+List three failure modes of a retry loop without backoff.</textarea>
+    <div class="row">
+      <label>路由 <select id="model"><option value="auto">auto（决策器判）</option><option value="small">small（弱池）</option><option value="large">large（强池）</option></select></label>
+      <label>任务类型 <select id="tt"><option value="">不带</option><option>code</option><option>edit</option><option>qa</option><option>extract</option><option>agent</option></select></label>
+      <label>并发 <input id="conc" type="number" min="1" max="32" value="8"></label>
+      <label>max_tokens <input id="maxtok" type="number" min="1" max="2048" value="120"></label>
+      <label><input id="via7000" type="checkbox" checked> 从个人端 :7000 进（不勾则直打网关 :4000）</label>
+      <button class="primary" id="send">发送</button>
+      <span class="sum" id="sum"></span>
+    </div>
+    <div class="hint">每一行是一个独立会话，同时发出，经 本机服务 → Switchyard → 决策器 → PAIR → 引擎。"节点"一列是发送结束后按 PAIR 账本的时间对上的，并发很高时可能对错一两条。</div>
+  </div>
+  <table id="tbl">
+    <thead><tr><th>#</th><th>输入</th><th>状态</th><th>服务模型</th><th>层</th><th>节点</th><th>耗时</th><th>tokens</th><th>回复</th></tr></thead>
+    <tbody id="rows"></tbody>
+  </table>
+</main>
+<script>
+const $ = id => document.getElementById(id);
+function nonce() { return Math.random().toString(36).slice(2, 8); }
+async function one(row, i, prompt, opts) {
+  const st = row.querySelector(".st"); st.innerHTML = '<span class="dot run"></span>发送中';
+  const t0 = Date.now();
+  try {
+    const r = await fetch("/api/batch/one", {method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({prompt: `[${opts.tag}-${i}] ${prompt}`, model: opts.model, task_type: opts.tt, session: `batch-${opts.tag}-${i}`, max_tokens: opts.maxtok, via_local: opts.via})});
+    const d = await r.json();
+    row.t0 = d.t0; row.t1 = d.t1;
+    if (d.error) { st.innerHTML = `<span class="dot bad"></span>${d.error}`; return; }
+    st.innerHTML = '<span class="dot ok"></span>完成';
+    row.querySelector(".m").textContent = d.model || "?";
+    row.querySelector(".tier").innerHTML = d.tier ? `<span class="tag ${d.tier}">${d.tier}</span>` : "";
+    row.querySelector(".lat").textContent = (d.latency_ms / 1000).toFixed(1) + "s";
+    row.querySelector(".tok").textContent = d.tokens ?? "";
+    const a = row.querySelector(".a"); a.dataset.full = d.content || ""; a.textContent = (d.content || "").slice(0, 80);
+  } catch (e) { st.innerHTML = `<span class="dot bad"></span>${e}`; }
+}
+$("send").onclick = async () => {
+  const prompts = $("prompts").value.split("\n").map(s => s.trim()).filter(Boolean);
+  if (!prompts.length) return;
+  const opts = {model: $("model").value, tt: $("tt").value, maxtok: +$("maxtok").value, via: $("via7000").checked, tag: nonce()};
+  const conc = Math.max(1, +$("conc").value);
+  const tbody = $("rows"); tbody.innerHTML = "";
+  const rows = prompts.map((p, i) => {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `<td>${i + 1}</td><td class="p">${p}</td><td><span class="st"><span class="dot"></span>排队</span></td><td class="m"></td><td class="tier"></td><td class="node"></td><td class="lat"></td><td class="tok"></td><td class="a"></td>`;
+    tr.querySelector(".a").onclick = ev => { const a = ev.currentTarget; a.classList.toggle("open"); a.textContent = a.classList.contains("open") ? a.dataset.full : (a.dataset.full || "").slice(0, 80); };
+    tbody.appendChild(tr); return tr;
+  });
+  $("send").disabled = true; const T = Date.now();
+  let next = 0, done = 0;
+  const worker = async () => { while (next < prompts.length) { const i = next++; await one(rows[i], i, prompts[i], opts); done++; $("sum").textContent = `${done}/${prompts.length} · ${((Date.now() - T) / 1000).toFixed(1)}s`; } };
+  await Promise.all(Array.from({length: Math.min(conc, prompts.length)}, worker));
+  // attribute nodes from PAIR's ledger (flushed asynchronously → short wait)
+  await new Promise(r => setTimeout(r, 4000));
+  const at = await (await fetch("/api/batch/attribute", {method:"POST", headers:{"Content-Type":"application/json"},
+    body: JSON.stringify({rows: rows.map((r, i) => ({i, t0: r.t0, t1: r.t1}))})})).json();
+  const cnt = {};
+  for (const [i, node] of Object.entries(at.nodes || {})) { rows[i].querySelector(".node").innerHTML = `<span class="tag node">${node}</span>`; cnt[node] = (cnt[node] || 0) + 1; }
+  $("sum").textContent += " · 节点分布 " + Object.entries(cnt).map(([k, v]) => `${k}:${v}`).join(" ");
+  $("send").disabled = false;
+};
+</script>
+</body>
+</html>
