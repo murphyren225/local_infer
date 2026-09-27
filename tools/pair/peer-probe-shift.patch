@@ -1,0 +1,98 @@
+diff a/nvpair-manual-nodes/manager.go b/nvpair-manual-nodes/manager.go
+--- a/nvpair-manual-nodes/manager.go	2026-09-19 00:36:26
++++ b/nvpair-manual-nodes/manager.go	2026-09-19 13:57:14
+@@ -83,8 +83,8 @@
+ // ManualEntry is the user-supplied identity of a manually added
+ // node. Address + Name are the historical fields. TLSPort is an
+ // optional hint that node-info on this host listens for HTTPS on
+-// the given port (typically 14319 with our default node-info
+-// flags); a zero TLSPort means "probe plain HTTP on 14318" — the
++// the given port (typically 24319 with our default node-info
++// flags); a zero TLSPort means "probe plain HTTP on 24318" — the
+ // historical behavior. MTLS is informational only on the entry
+ // (we don't probe differently), but it's persisted so the UI can
+ // show the operator the configuration they set.
+@@ -100,7 +100,7 @@
+ // the UI so the node card can render a lock icon without having to
+ // cross-reference the entries list. NodeInfoPort reflects whichever
+ // port we actually reached (TLS port if TLS is configured, plain
+-// 14318 otherwise) so existing UI that displays the port stays
++// 24318 otherwise) so existing UI that displays the port stays
+ // correct.
+ type ManualNodeStatus struct {
+ 	ID           string   `json:"id"`
+@@ -110,7 +110,7 @@
+ 	OllamaPort   int      `json:"ollama_port"`
+ 	OllamaModels []string `json:"ollama_models,omitempty"`
+ 	// LM Studio is probed on its default OpenAI-API port the same way Ollama
+-	// is on 11434, so a manually-added node running LM Studio can be bridged
++	// is on 21434, so a manually-added node running LM Studio can be bridged
+ 	// into lmstudio-proxy by a supervising broker.
+ 	LMStudioUp     bool        `json:"lmstudio_up"`
+ 	LMStudioPort   int         `json:"lmstudio_port"`
+@@ -151,7 +151,7 @@
+ 	codec  *Codec
+ 	cancel context.CancelFunc
+ 
+-	// client is the plain-HTTP probe client (Ollama on :11434 and
++	// client is the plain-HTTP probe client (Ollama on :21434 and
+ 	// nvpair-node-info's HTTP listener). tlsClient is used only when
+ 	// the entry sets TLSPort > 0; if the operator hasn't given us
+ 	// any TLS material via flags, tlsClient still works because
+@@ -251,7 +251,7 @@
+ 	addr := entry.Address
+ 	id := nodeID(entry)
+ 
+-	ollamaUp, ollamaModels := m.probeOllama(addr, 11434)
++	ollamaUp, ollamaModels := m.probeOllama(addr, 21434)
+ 	lmStudioUp, lmStudioModels := m.probeLMStudio(addr, lmStudioPort)
+ 
+ 	// Pick scheme + port + client based on the entry's TLS hint.
+@@ -259,9 +259,9 @@
+ 	// don't probe both. TLSPort > 0 means HTTPS on that port via
+ 	// the TLS client (which carries the operator's client cert,
+ 	// if configured). Otherwise it's plain HTTP on the historical
+-	// 14318.
++	// 24318.
+ 	scheme := "http"
+-	nodeInfoPort := 14318
++	nodeInfoPort := 24318
+ 	probeClient := m.client
+ 	if entry.TLSPort > 0 {
+ 		scheme = "https"
+@@ -285,7 +285,7 @@
+ 		Name:           entry.Name,
+ 		Address:        addr,
+ 		OllamaUp:       ollamaUp,
+-		OllamaPort:     11434,
++		OllamaPort:     21434,
+ 		OllamaModels:   ollamaModels,
+ 		LMStudioUp:     lmStudioUp,
+ 		LMStudioPort:   lmStudioPort,
+@@ -398,7 +398,7 @@
+ }
+ 
+ // lmStudioPort is LM Studio's default OpenAI-API server port, probed the same
+-// way Ollama is hardcoded to 11434. A manual node is remote, so (like Ollama)
++// way Ollama is hardcoded to 21434. A manual node is remote, so (like Ollama)
+ // we assume the engine's default port rather than resolving it via the engine
+ // manager (which only governs the local engine).
+ const lmStudioPort = 1234
+@@ -531,7 +531,7 @@
+ func (m *Manager) addNode(entry ManualEntry) ManualNodeStatus {
+ 	id := nodeID(entry)
+ 
+-	nodeInfoPort := 14318
++	nodeInfoPort := 24318
+ 	if entry.TLSPort > 0 {
+ 		nodeInfoPort = entry.TLSPort
+ 	}
+@@ -539,7 +539,7 @@
+ 		ID:           id,
+ 		Name:         entry.Name,
+ 		Address:      entry.Address,
+-		OllamaPort:   11434,
++		OllamaPort:   21434,
+ 		NodeInfoPort: nodeInfoPort,
+ 		TLSEnabled:   entry.TLSPort > 0,
+ 		MTLSRequired: entry.TLSPort > 0 && entry.MTLS,

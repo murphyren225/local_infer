@@ -285,7 +285,14 @@ draft **不是一个独立服务**，是服务目标模型的那个引擎进程�
 2. 把 `services/build/bin/*`、`~/pair/pairctl.py`、`taillog.py`、`bin/pair-node-setup` scp 到节点的 `/root/node-kit/`。
 3. 节点上装 SGLang（`python3 -m venv /root/autodl-tmp/sglang-venv && pip install 'sglang[all]'`）、下模型（AutoDL 到不了 HF，用 `modelscope download --model Qwen/Qwen3-1.7B --local_dir /root/autodl-tmp/models/Qwen3-1.7B`）。这两步最慢，各几分钟到十几分钟。
 4. 节点上 `bash /root/node-kit/pair-node-setup`：放二进制、把 venv 符号链接进 PAIR 引擎目录、修 libstdc++、写引擎覆盖文件（模型路径、服务名、n-gram draft）、起 PAIR broker、`engine:start`。
-5. Mac 上 `TUNNEL_TARGET=root@<host> TUNNEL_PORT=<port> bin/tunnel-4090 &`（或改脚本默认值）。Mac 的 PAIR 手动节点仍然是 `127.0.0.1`，隧道换了它探到的就是新机器；节点 UUID 会变，账本里旧记录还指旧 UUID。
+5. Mac 上在 `.env` 里写 `TUNNEL_TARGET=root@<host>`、`TUNNEL_PORT=<port>`，然后 `bin/tunnel-4090 &`。Mac 的 PAIR 手动节点仍然是 `127.0.0.1`，隧道换了它探到的就是新机器；节点 UUID 会变，账本里旧记录还指旧 UUID。
 6. `python3 tests/links.py all`。
 
-2026-09-27 换到 `connect.westc.seetacloud.com:34821` 就是这么做的。
+2026-09-27 换机器就是这么做的；目标主机写在 `.env` 的 `TUNNEL_TARGET` / `TUNNEL_PORT`（不进仓库）。
+
+### 9.3 PAIR 不再改源码（2026-09-27）
+
+SGLang / llama-server 进 LM 槽位改为用 PAIR 自带的用户覆盖文件实现（`tools/pair/engine_override.py` 生成
+`<config>/engines/lmstudio.json`），4090 和 Mac 上的 PAIR 服务端都换回上游源码构建，七环加整链 PASS。
+fork 里的 manifest 和 `registry.go` 改动已还原；端口偏移从 fork 里的整棵副本改成构建时补丁（`tools/pair/port-shift.sh`）。
+fork 只剩桌面端 8 行界面改动。完整清单见 `docs/upstream-changes.md`。上文 §2.2、§9.1 里"改 manifest"的描述是历史做法。

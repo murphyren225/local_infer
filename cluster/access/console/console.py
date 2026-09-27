@@ -262,6 +262,7 @@ async def pair_status():
         counts[w.get("scheduledOn") or ""] = counts.get(w.get("scheduledOn") or "", 0) + 1
     lm_models = await _models(PAIR_LM_PROXY)
     disc = _discovery()
+    pool_models = {n["model"] for n in _nodes().values()} or set(lm_models)   # what Switchyard's pools route on
     nodes, names = [], {}
     for n in disc:
         uid = n.get("hostUuid") or n.get("id")
@@ -276,7 +277,7 @@ async def pair_status():
         else:   # the snapshot is only re-logged on change, so lastSeen goes stale: node-info answering is the signal
             online = bool(hw) or time.time() - (n.get("lastSeen") or 0) < 120
         lm = by.get("lmstudio") or []
-        in_chain = online and any(m in lm for m in lm_models)
+        in_chain = online and any(m in lm for m in pool_models)
         engine = ("llama-server" if is_self else "SGLang" if kind == "manual" else "LM Studio") if lm else \
                  ("Ollama" if by.get("ollama") else "none")
         nodes.append({"name": name, "kind": kind, "uuid": uid, "address": n.get("ipAddress", ""),

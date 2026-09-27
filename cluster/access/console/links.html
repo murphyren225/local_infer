@@ -75,8 +75,8 @@
       <form class="add" id="addform">
         <input name="name" placeholder="节点名，如 autodl-4090" required>
         <input name="address" placeholder="PAIR 拨的地址，隧道用 127.0.0.1" value="127.0.0.1" required>
-        <input name="ssh_target" class="full" placeholder="SSH 目标（可选），如 root@connect.westb.seetacloud.com；填了就自动开隧道">
-        <input name="ssh_port" placeholder="SSH 端口，如 43314">
+        <input name="ssh_target" class="full" placeholder="SSH 目标（可选），如 root@gpu-host；填了就自动开隧道">
+        <input name="ssh_port" placeholder="SSH 端口，如 22">
         <button class="primary" type="submit">添加并重启 PAIR</button>
       </form>
       <div class="hint">远端机器上需要已经在跑 PAIR（引擎管理器 + SGLang 在 LM 槽位）。添加会写入 PAIR 的手动节点配置并重启桌面端，约一分钟。</div>

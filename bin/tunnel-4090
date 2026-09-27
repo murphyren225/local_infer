@@ -12,8 +12,11 @@
 #   14000       → 4000     Switchyard on the 4090 (the older single-box setup)
 #   14100       → 4100     decider on the 4090
 #   30000       → 30000    SGLang, direct (link-1 test)
-TARGET=${TUNNEL_TARGET:-root@connect.westc.seetacloud.com}
-PORT=${TUNNEL_PORT:-34821}
+# Target comes from the environment or from .env (git-ignored): TUNNEL_TARGET=user@host  TUNNEL_PORT=22
+ENVF="$(cd "$(dirname "$0")/.." && pwd)/.env"
+[ -f "$ENVF" ] && { TUNNEL_TARGET=${TUNNEL_TARGET:-$(grep -E '^TUNNEL_TARGET=' "$ENVF" | cut -d= -f2-)}; TUNNEL_PORT=${TUNNEL_PORT:-$(grep -E '^TUNNEL_PORT=' "$ENVF" | cut -d= -f2-)}; }
+TARGET=${TUNNEL_TARGET:?set TUNNEL_TARGET (user@host) in the environment or .env}
+PORT=${TUNNEL_PORT:-22}
 FWD="-L 14318:127.0.0.1:14318 -L 14319:127.0.0.1:14319 -L 14320:127.0.0.1:14320 -L 14321:127.0.0.1:14321 -L 14322:127.0.0.1:14322 -L 14323:127.0.0.1:14323 \
      -L 1234:127.0.0.1:30000 -L 17998:127.0.0.1:17999 -L 14000:127.0.0.1:4000 -L 14100:127.0.0.1:4100 -L 30000:127.0.0.1:30000"
 

@@ -4,7 +4,7 @@
 # serves the target model: the engine runs the draft, proposes k tokens, verifies them with the
 # target in one forward pass, and keeps the accepted prefix. Output is bit-identical to no draft
 # (greedy) — only speed changes. So Switchyard, the decider and PAIR are unaware of drafts;
-# the engine manifest / preset is the only place that changes (docs/pipeline-design.md §12).
+# the engine's launch arguments (PAIR user override file, tools/pair/engine_override.py) are the only place that changes (docs/pipeline-design.md §12).
 #
 # Dependencies, in order:
 #   base model → engine build (SGLang 0.5.20 on the 4090, llama.cpp b10819 on the Mac)

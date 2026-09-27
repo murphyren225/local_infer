@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Runs ON a Linux+CUDA node to make it a PAIR node with SGLang in the LM slot (docs/pipeline-design.md §9).
 # Idempotent. Expects, in the same directory as this script (scp them together):
-#   nvpair-*/ollama-proxy/lmstudio-proxy   the fork's linux/amd64 service binaries (services/build/bin)
-#   pairctl.py, taillog.py                 headless broker driver + log tail helper
+#   nvpair-*/ollama-proxy/lmstudio-proxy   PAIR's linux/amd64 service binaries, built from UPSTREAM source (services/build/bin)
+#   pairctl.py, taillog.py, engine_override.py   from tools/pair/ (headless driver, log tail, override writer)
 # and on the node: a SGLang venv at $SGLANG_VENV and the model at $MODEL_PATH (see bin/pair-node-prepare).
 #
 #   bash pair-node-setup [--served-name qwen3-1.7b] [--model /root/autodl-tmp/models/Qwen3-1.7B] [--no-draft]
@@ -20,8 +20,16 @@ CFG="/root/.config/Nvidia Corporation/Personal AI Router"
 BIN=/root/pair/Personal-AI-Router/services/build/bin
 mkdir -p "$BIN" "$CFG/engines" "$CFG/engine-bin/lmstudio" /root/pair
 
+echo "== stop any running PAIR (a running binary cannot be overwritten)"
+pkill -f "pairctl.py serv[e]" 2>/dev/null || true; pkill -f "nvpair-[u]i-broker" 2>/dev/null || true; sleep 3
+pkill -f "build/bin/nvpair-[a-z-]*" 2>/dev/null || true; pkill -f "build/bin/[ol]*[a-z]*-proxy" 2>/dev/null || true; sleep 1
+pkill -f "sglang.launch_serve[r]" 2>/dev/null || true; sleep 2
+
 echo "== binaries → $BIN"
-for b in "$HERE"/nvpair-* "$HERE"/ollama-proxy "$HERE"/lmstudio-proxy; do [ -f "$b" ] && cp "$b" "$BIN/" && chmod +x "$BIN/$(basename "$b")"; done
+for b in "$HERE"/nvpair-* "$HERE"/ollama-proxy "$HERE"/lmstudio-proxy; do
+  [ -f "$b" ] || continue
+  cp "$b" "$BIN/"; chmod +x "$BIN/$(basename "$b")"
+done
 cp "$HERE/pairctl.py" "$HERE/taillog.py" /root/pair/ 2>/dev/null || true
 "$BIN/nvpair-engine-manager" --version || true
 
@@ -41,26 +49,18 @@ command -v ninja >/dev/null || { "$SGLANG_VENV/bin/pip" install -q ninja && ln -
 
 echo "== engine override → $CFG/engines/lmstudio.json"
 PATH="/root/miniconda3/bin:$PATH"
-python3 - "$CFG/engines/lmstudio.json" "$MODEL_PATH" "$SERVED" "$DRAFT" << 'PY'
-import json, sys
-path, model, served, draft = sys.argv[1:5]
-args = ["-m", "sglang.launch_server", "--model-path", model, "--served-model-name", served,
-        "--host", "{host}", "--port", "{port}", "--context-length", "8192",
-        "--mem-fraction-static", "0.5", "--reasoning-parser", "qwen3"]
-if draft == "1":
-    args += ["--speculative-algorithm", "NGRAM", "--speculative-num-draft-tokens", "8"]
-json.dump({"engine": "lmstudio", "runtime": {"port": 30000, "args": args}}, open(path, "w"), indent=2)
-PY
-cat "$CFG/engines/lmstudio.json"
+DRAFT_KIND=none; [ "$DRAFT" = 1 ] && DRAFT_KIND=ngram
+python3 "$HERE/engine_override.py" sglang --model "$MODEL_PATH" --name "$SERVED" --draft "$DRAFT_KIND" --out "$CFG/engines/lmstudio.json"
+head -c 300 "$CFG/engines/lmstudio.json"; echo " …"
 
 echo "== start PAIR broker (pairctl serve on 127.0.0.1:17999)"
-pkill -f "pairctl.py serv[e]" 2>/dev/null || true; pkill -f "nvpair-[u]i-broker" 2>/dev/null || true; sleep 3
-pkill -f "build/bin/nvpair-[a-z-]*" 2>/dev/null || true; pkill -f "build/bin/[ol]*[a-z]*-proxy" 2>/dev/null || true; sleep 1
 cd /root/pair && (setsid nohup bash -lc "python3 /root/pair/pairctl.py serve" > /root/pair/pairctl.log 2>&1 < /dev/null &)
 for _ in $(seq 1 20); do sleep 2; grep -q "app:ready=True" /root/pair/pairctl.log 2>/dev/null && break; done
 tail -1 /root/pair/pairctl.log
 
-echo "== engine:start lmstudio (SGLang, first start compiles kernels: minutes)"
-bash -lc "python3 /root/pair/pairctl.py call engine:start '{\"engine\":\"lmstudio\"}' --timeout 900" | grep -E '"running"|"healthy"|message' | tr -d ' ' | paste -sd ' '
+echo "== engine:start lmstudio (SGLang; the first start compiles kernels: minutes)"
+(setsid nohup bash -lc "python3 /root/pair/pairctl.py call engine:start '{\"engine\":\"lmstudio\"}' --timeout 900" > /root/pair/start.log 2>&1 < /dev/null &)
+for i in $(seq 1 90); do sleep 10; curl -s -m 3 http://127.0.0.1:30000/v1/models | grep -q "$SERVED" && break; done
 curl -s -m 5 http://127.0.0.1:30000/v1/models | head -c 200; echo
+"$BIN/nvpair-engine-manager" --version
 echo "== done. From the Mac: bin/tunnel-4090 (TUNNEL_TARGET/TUNNEL_PORT) then PAIR's manual node 127.0.0.1 picks it up."

@@ -1,0 +1,395 @@
+diff a/lmstudio-proxy/portstore.go b/lmstudio-proxy/portstore.go
+--- a/lmstudio-proxy/portstore.go	2026-09-19 00:36:26
++++ b/lmstudio-proxy/portstore.go	2026-09-26 13:14:07
+@@ -14,7 +14,7 @@
+ const proxyPortFile = "lmstudio-proxy-port.json"
+ 
+ const (
+-	defaultProxyPort       = 1234
++	defaultProxyPort       = 11234
+ 	legacyDefaultProxyPort = 1235
+ )
+ 
+diff a/nvpair-cluster-manager/manager.go b/nvpair-cluster-manager/manager.go
+--- a/nvpair-cluster-manager/manager.go	2026-09-19 00:36:26
++++ b/nvpair-cluster-manager/manager.go	2026-09-19 13:56:59
+@@ -26,8 +26,8 @@
+ var Version = "dev"
+ 
+ // defaultPort is the inter-node HTTP listener port (one above
+-// nvpair-workload-manager's 14320).
+-const defaultPort = 14321
++// nvpair-workload-manager's 24320).
++const defaultPort = 24321
+ 
+ // Manager owns the cluster-manager's local JSON-RPC surface. Later commits add
+ // the node identity, trusted-node store, membership set, and the inter-node
+diff a/nvpair-engine-manager/lifecycle.go b/nvpair-engine-manager/lifecycle.go
+--- a/nvpair-engine-manager/lifecycle.go	2026-09-19 00:36:26
++++ b/nvpair-engine-manager/lifecycle.go	2026-09-19 13:56:59
+@@ -393,8 +393,8 @@
+ 			// lost its handle — reclaim it by terminating the PID bound to the
+ 			// port, so a user OFF actually takes effect instead of being
+ 			// refused forever. This is precise to the port, so a genuine
+-			// desktop app on a different port (e.g. Ollama's own :11434 while
+-			// we manage :11435) is never touched; we decline only a process
++			// desktop app on a different port (e.g. Ollama's own :21434 while
++			// we manage :21435) is never touched; we decline only a process
+ 			// whose image we can't confirm is ours.
+ 			pid, image, ok := pidOnPort(port)
+ 			if ok && isManagedInstallPath(binPath, st.installDir) && isOurEngineImage(image, binPath) {
+diff a/nvpair-engine-manager/manifests/ollama.json b/nvpair-engine-manager/manifests/ollama.json
+--- a/nvpair-engine-manager/manifests/ollama.json	2026-09-19 00:36:26
++++ b/nvpair-engine-manager/manifests/ollama.json	2026-09-19 13:56:59
+@@ -7,7 +7,7 @@
+     "args": ["serve"],
+     "env": { "OLLAMA_HOST": "{host}:{port}" },
+     "bind": "127.0.0.1",
+-    "port": 11434,
++    "port": 21434,
+     "ready": { "http": "http://127.0.0.1:{port}/api/version", "status": 200, "timeout_s": 600 },
+     "stop": { "signal": "term", "grace_s": 5 },
+     "health": { "http": "http://127.0.0.1:{port}/api/version", "status": 200, "interval_s": 5 }
+diff a/nvpair-errors/main.go b/nvpair-errors/main.go
+--- a/nvpair-errors/main.go	2026-09-19 00:36:26
++++ b/nvpair-errors/main.go	2026-09-19 13:56:59
+@@ -21,7 +21,7 @@
+ func main() {
+ 	ipcPath := flag.String("ipc", "", "IPC endpoint: Unix domain socket path or Windows named pipe (default: stdin/stdout)")
+ 	peerSync := flag.Bool("peer-sync", false, "serve the cross-node errors endpoint and push errors to peer nodes learned from the broker's discovery relay")
+-	port := flag.Int("port", 14319, "HTTP port for the cross-node errors endpoint (only used with --peer-sync)")
++	port := flag.Int("port", 24319, "HTTP port for the cross-node errors endpoint (only used with --peer-sync)")
+ 	clusterDir := flag.String("cluster-dir", "", "cluster config dir (node.crt/node.key + trusted/); cross-node error sync is pin-based cluster mTLS, so without a usable identity and live membership here this node serves and pushes nothing")
+ 	nodeID := flag.String("node-id", "", "this node's stable origin id (the broker passes its resolved per-host UUID); defaults to the hostname when unset so the bare binary keeps its standalone behavior")
+ 	showVersion := flag.Bool("version", false, "print version and exit")
+diff a/nvpair-node-info/main.go b/nvpair-node-info/main.go
+--- a/nvpair-node-info/main.go	2026-09-19 00:36:26
++++ b/nvpair-node-info/main.go	2026-09-19 13:56:59
+@@ -294,8 +294,8 @@
+ }
+ 
+ func main() {
+-	port := flag.Int("port", 14318, "HTTP port to listen on")
+-	tlsPort := flag.Int("tls-port", 14319, "HTTPS port to listen on (only used when --cert and --key are set)")
++	port := flag.Int("port", 24318, "HTTP port to listen on")
++	tlsPort := flag.Int("tls-port", 24319, "HTTPS port to listen on (only used when --cert and --key are set)")
+ 	certPath := flag.String("cert", "", "path to TLS server certificate (PEM); enables HTTPS when set together with --key")
+ 	keyPath := flag.String("key", "", "path to TLS server private key (PEM); enables HTTPS when set together with --cert")
+ 	clientCAPath := flag.String("client-ca", "", "path to PEM bundle of CAs trusted to sign client certificates; enables mTLS when set")
+@@ -415,10 +415,10 @@
+ 	// Listener layout (set up below depending on flags). Exactly one of the two
+ 	// blocks that own *port runs:
+ 	//   * With --cluster-dir: one cluster-gated listener on *port (default
+-	//     14318) carrying both personalities behind a first-byte split. Which
++	//     24318) carrying both personalities behind a first-byte split. Which
+ 	//     callers it admits follows live cluster membership.
+ 	//   * Otherwise: httpServer on *port when httpEnabled, and, with
+-	//     --cert/--key, tlsServer on *tlsPort (default 14319) — a separate port
++	//     --cert/--key, tlsServer on *tlsPort (default 24319) — a separate port
+ 	//     so clients can be migrated independently.
+ 	// At least one listener is always running (the flag validation above
+ 	// guarantees we don't end up with none: --accept-http only matters when TLS
+@@ -452,7 +452,7 @@
+ 
+ 	// The cluster-gated listener takes over the *primary* node-info port (*port)
+ 	// rather than the separate *tlsPort. That deliberately avoids colliding with
+-	// nvpair-errors, which the broker also spawns on :14319 — node-info's default
++	// nvpair-errors, which the broker also spawns on :24319 — node-info's default
+ 	// --tls-port. The BYO --cert path keeps its own *tlsPort so a plaintext and a
+ 	// TLS listener can coexist there.
+ 	if clusterGated {
+diff a/nvpair-ui-broker/advertiser.go b/nvpair-ui-broker/advertiser.go
+--- a/nvpair-ui-broker/advertiser.go	2026-09-19 00:36:26
++++ b/nvpair-ui-broker/advertiser.go	2026-09-26 13:14:42
+@@ -17,25 +17,25 @@
+ 	// defaultOllamaPort / defaultLMStudioPort are the engines' stock ports,
+ 	// used ONLY as a fallback when engine-manager can't report the real one.
+ 	// Never hardcode the advertise/health port: the product-default proxy takes
+-	// Ollama's :11434, so a fixed :11434 would advertise the proxy
++	// Ollama's :21434, so a fixed :21434 would advertise the proxy
+ 	// as Ollama and make the proxy (and peers) self-forward into a loop. The
+ 	// real port is resolved per poll via localEnginePort.
+-	defaultOllamaPort   = 11434
+-	defaultLMStudioPort = 1234
++	defaultOllamaPort   = 21434
++	defaultLMStudioPort = 11234
+ 
+ 	// engineManagerHTTPPort is the fixed LAN port the broker tells
+ 	// nvpair-engine-manager to serve its HTTP surface (/v1/models) on, and the port
+ 	// it registers as the em service so peers' daemons can fetch this node's
+-	// model list. Fixed like node-info's :14318 (next free in the 143xx range);
++	// model list. Fixed like node-info's :24318 (next free in the 143xx range);
+ 	// the broker knows it, so no dynamic port handshake is needed.
+-	engineManagerHTTPPort = 14322
++	engineManagerHTTPPort = 24322
+ 
+ 	// engineControlPort is the fixed LAN port the broker tells
+ 	// nvpair-engine-manager to serve its cluster-scoped mTLS remote-control surface
+ 	// (the ec service: remote install/pull/start/stop + engine status) on. Unlike
+ 	// em (plain, model list) it's pin-based mTLS and only binds when this node is
+ 	// clustered. Next free after em in the 143xx range.
+-	engineControlPort = 14323
++	engineControlPort = 24323
+ 
+ 	// autoAdvertiseInterval is how often the broker polls a local engine to
+ 	// decide whether to register it with (or unregister it from) the discovery
+@@ -85,7 +85,7 @@
+ // enrichment.
+ func (b *Broker) reconcileAdvertise(client *http.Client) {
+ 	// During the managed bind -> backend-move transition, engine:status would
+-	// probe :11434 and could mistake the proxy (or a remote response forwarded
++	// probe :21434 and could mistake the proxy (or a remote response forwarded
+ 	// through it) for an externally started Ollama. Do not query liveness until
+ 	// the backend has moved or managed setup has safely fallen back.
+ 	if b.ollamaFacadeIsPendingBackend() {
+@@ -117,7 +117,7 @@
+ 		return false
+ 	}
+ 	// Recovery flips managed mode off before it live-rebinds the proxy away
+-	// from :11434. Keep probes gated through that interval (and indefinitely if
++	// from :21434. Keep probes gated through that interval (and indefinitely if
+ 	// the rebind fails) so the proxy can never be adopted as Ollama.
+ 	return b.managedOllamaFacade.Load() || b.proxyListenPort() == managedOllamaFacadePort
+ }
+diff a/nvpair-ui-broker/broker.go b/nvpair-ui-broker/broker.go
+--- a/nvpair-ui-broker/broker.go	2026-09-19 00:36:26
++++ b/nvpair-ui-broker/broker.go	2026-09-19 13:56:59
+@@ -163,7 +163,7 @@
+ 	clusterDir        string
+ 	// Managed-port state is prepared before proxy startup and read by the proxy
+ 	// supervisor/reader goroutines. Ollama commits its pending backend move after
+-	// its proxy reserves :11434; LM Studio moves through engine-manager first,
++	// its proxy reserves :21434; LM Studio moves through engine-manager first,
+ 	// then releases its gate after the proxy owns :1234 and has its backend.
+ 	managedOllamaFacade    atomic.Bool
+ 	managedOllamaBackend   atomic.Int32
+@@ -627,7 +627,7 @@
+ 	// only source. It runs on every spawn, which also covers a supervised restart.
+ 	b.pushClusterIdentityToNodeInfo()
+ 	// Register node-info's service so the daemon advertises ni= on _nvpair-node.
+-	// node-info binds the fixed :14318 (force_ports is inert), so the broker
++	// node-info binds the fixed :24318 (force_ports is inert), so the broker
+ 	// knows its port. Idempotent across restarts.
+ 	b.registerService(noderec.RegisterParams{Service: noderec.ServiceNodeInfo, Port: nodeInfoHTTPPort})
+ 	slog.Info("node-info started", "path", b.nodeInfoPath, "pid", np.cmd.Process.Pid)
+@@ -1973,7 +1973,7 @@
+ 	if b.dispatchErrorsNotif("proxy", method, params) {
+ 		return
+ 	}
+-	// A process can win :11434 after startup preflight but before the proxy
++	// A process can win :21434 after startup preflight but before the proxy
+ 	// binds. Flip the supervisor's next spawn to an explicit safe fallback;
+ 	// the backend move is still pending, so no engine state needs rollback.
+ 	if method == "error" && b.managedOllamaFacade.Load() {
+@@ -3025,7 +3025,7 @@
+ 			select {
+ 			case <-b.ollamaPortReady:
+ 				// Recovery opens the general port gate before a best-effort live
+-				// rebind can finish. Never probe if the proxy still owns :11434.
++				// rebind can finish. Never probe if the proxy still owns :21434.
+ 				if b.ollamaFacadeIsPendingBackend() {
+ 					_ = b.codec.RespondError(msg.ID, -32000, "Ollama port setup is still reconciling; retry")
+ 					return
+@@ -3055,7 +3055,7 @@
+ 		return
+ 	}
+ 	if isOllamaPortAssignment && requestedPort == managedOllamaFacadePort && b.managedOllamaFacade.Load() {
+-		if err := b.codec.RespondError(msg.ID, -32000, "port 11434 is reserved by the managed Ollama proxy; choose another backend port or disable managed port ownership and restart NVPAIR"); err != nil {
++		if err := b.codec.RespondError(msg.ID, -32000, "port 21434 is reserved by the managed Ollama proxy; choose another backend port or disable managed port ownership and restart NVPAIR"); err != nil {
+ 			log.Printf("failed to reject conflicting Ollama port assignment: %v", err)
+ 		}
+ 		return
+diff a/nvpair-ui-broker/lmstudioport.go b/nvpair-ui-broker/lmstudioport.go
+--- a/nvpair-ui-broker/lmstudioport.go	2026-09-19 00:36:26
++++ b/nvpair-ui-broker/lmstudioport.go	2026-09-26 13:14:42
+@@ -13,7 +13,7 @@
+ )
+ 
+ const (
+-	managedLMStudioFacadePort      = 1234
++	managedLMStudioFacadePort      = 11234
+ 	managedLMStudioBackendStart    = 1235
+ 	lmstudioPortOwnershipBlockedID = "lmstudio-proxy:port-ownership-blocked"
+ )
+diff a/nvpair-ui-broker/ollamahost.go b/nvpair-ui-broker/ollamahost.go
+--- a/nvpair-ui-broker/ollamahost.go	2026-09-19 00:36:26
++++ b/nvpair-ui-broker/ollamahost.go	2026-09-19 13:56:59
+@@ -23,10 +23,10 @@
+ 	// These ports are fixed by the broker-owned service topology. Keep the
+ 	// values here as the broker's single source and use them when registering
+ 	// the corresponding workers as well as when reserving an OLLAMA_HOST alias.
+-	nodeInfoHTTPPort       = 14318
+-	errorsHTTPPort         = 14319
+-	workloadHTTPPort       = 14320
+-	clusterManagerHTTPPort = 14321
++	nodeInfoHTTPPort       = 24318
++	errorsHTTPPort         = 24319
++	workloadHTTPPort       = 24320
++	clusterManagerHTTPPort = 24321
+ 
+ 	lmstudioProxyPortFile = "lmstudio-proxy-port.json"
+ )
+@@ -69,7 +69,7 @@
+ // client equivalents, matching Ollama's ConnectableHost behavior.
+ func inheritedOllamaHostAlias(raw string) (ollamaHostAlias, bool) {
+ 	s := strings.Trim(strings.TrimSpace(raw), "\"'")
+-	defaultPort := "11434"
++	defaultPort := "21434"
+ 	scheme, hostport, hasScheme := strings.Cut(s, "://")
+ 	if !hasScheme {
+ 		scheme, hostport = "http", s
+diff a/nvpair-ui-broker/proxy.go b/nvpair-ui-broker/proxy.go
+--- a/nvpair-ui-broker/proxy.go	2026-09-19 00:36:26
++++ b/nvpair-ui-broker/proxy.go	2026-09-19 13:56:59
+@@ -23,7 +23,7 @@
+ const proxyCallTimeout = 5 * time.Second
+ 
+ // proxyProcess is the broker's handle on its child ollama-proxy: a full
+-// bidirectional JSON-RPC peer that runs an HTTP reverse proxy (default :11435),
++// bidirectional JSON-RPC peer that runs an HTTP reverse proxy (default :21435),
+ // emits a "ready" notification carrying the bound port, and accepts id-bearing
+ // control-plane requests. The id-correlation + read pump live in the shared
+ // jsonrpc.Peer; this handle owns the OS process and the readiness/port state.
+diff a/nvpair-ui-broker/proxyport.go b/nvpair-ui-broker/proxyport.go
+--- a/nvpair-ui-broker/proxyport.go	2026-09-19 00:36:26
++++ b/nvpair-ui-broker/proxyport.go	2026-09-19 13:56:59
+@@ -15,7 +15,7 @@
+ )
+ 
+ // proxyport.go owns the broker's proxy/engine port ordering. With managed
+-// ownership enabled it reserves :11434, then moves a stopped backend when its
++// ownership enabled it reserves :21434, then moves a stopped backend when its
+ // configured port is the facade or is occupied. A running or unknown owner is never killed.
+ // With managed ownership disabled the legacy engine-wins bump remains.
+ 
+@@ -26,8 +26,8 @@
+ const (
+ 	proxyPortBumpedID         = "ollama-proxy:port-bumped"
+ 	portOwnershipBlockedID    = "ollama-proxy:port-ownership-blocked"
+-	managedOllamaFacadePort   = 11434
+-	managedOllamaBackendStart = 11435
++	managedOllamaFacadePort   = 21434
++	managedOllamaBackendStart = 21435
+ )
+ 
+ type ollamaPortStatus struct {
+@@ -116,7 +116,7 @@
+ 
+ // blockManagedOllamaFacade disables the managed attempt and chooses an
+ // explicit free fallback for the proxy. Explicit startup matters here: a
+-// persisted :11434 must not make a blocked proxy crash-loop behind an existing
++// persisted :21434 must not make a blocked proxy crash-loop behind an existing
+ // owner. It returns the fallback so a live proxy can rebind there too.
+ func (b *Broker) blockManagedOllamaFacade(reason string, excludedPorts ...int) int {
+ 	b.managedOllamaFacade.Store(false)
+@@ -147,7 +147,7 @@
+ 
+ // prepareManagedOllamaFacade runs before the proxy is spawned. It only builds
+ // a plan; the stopped backend is not persisted onto its new port until a proxy
+-// ready event proves :11434 has actually been reserved. Adopted/external
++// ready event proves :21434 has actually been reserved. Adopted/external
+ // engines are never moved because this slice has no process-takeover authority.
+ func (b *Broker) prepareManagedOllamaFacade() {
+ 	b.prepareManagedOllamaFacadeWithPortCheck(tcpPortAvailable)
+@@ -219,7 +219,7 @@
+ 	b.prepareOllamaHostAlias(policy.Value, st.Port)
+ 	if !policy.Value {
+ 		// Opting out after a managed run commonly leaves stopped Ollama on
+-		// :11435. Start the proxy explicitly elsewhere so it cannot squat that
++		// :21435. Start the proxy explicitly elsewhere so it cannot squat that
+ 		// configured backend port before Ollama starts.
+ 		b.managedOllamaFacade.Store(false)
+ 		b.managedOllamaBackend.Store(0)
+@@ -305,7 +305,7 @@
+ }
+ 
+ // needsOllamaPortGate reports the client requests that can probe and adopt the
+-// configured Ollama port. While :11434 is changing from backend to facade,
++// configured Ollama port. While :21434 is changing from backend to facade,
+ // those probes must wait or they can mistake the proxy for a local engine.
+ func needsOllamaPortGate(method string, params json.RawMessage) bool {
+ 	if method == "engine:get-installed" {
+@@ -426,7 +426,7 @@
+ 			return
+ 		}
+ 
+-		// Commit the pending stopped-engine move only after :11434 is ours.
++		// Commit the pending stopped-engine move only after :21434 is ours.
+ 		if backend := b.takePendingManagedOllamaBackend(boundPort); backend != 0 {
+ 			defer b.ollamaMoveInFlight.Store(false)
+ 			em := b.getEngineMgr()
+@@ -440,7 +440,7 @@
+ 			}
+ 			if err != nil || rpcErr != nil {
+ 				// The RPC may have applied and then lost its response. Keep the
+-				// fallback off both candidate ports, vacate :11434 first, then
++				// fallback off both candidate ports, vacate :21434 first, then
+ 				// best-effort restore the original stopped-engine configuration.
+ 				sourcePort := b.ollamaBackendSourcePort()
+ 				fallback := b.blockManagedOllamaFacade("the stopped Ollama backend could not be moved", backend)
+diff a/nvpair-workload-manager/main.go b/nvpair-workload-manager/main.go
+--- a/nvpair-workload-manager/main.go	2026-09-19 00:36:26
++++ b/nvpair-workload-manager/main.go	2026-09-19 13:56:59
+@@ -23,7 +23,7 @@
+ // server listens on; it's advertised as wl=<port> in this node's _nvpair-node
+ // record (by the node-scanner daemon) and peers are dialed on the port carried
+ // in their own directory entry.
+-const defaultPort = 14320
++const defaultPort = 24320
+ 
+ func main() {
+ 	port := flag.Int("port", defaultPort, "inter-node HTTP port to listen on; the broker registers it as this node's wl service with the discovery daemon")
+diff a/ollama-proxy/main.go b/ollama-proxy/main.go
+--- a/ollama-proxy/main.go	2026-09-19 00:36:26
++++ b/ollama-proxy/main.go	2026-09-19 13:56:59
+@@ -28,7 +28,7 @@
+ }
+ 
+ func main() {
+-	port := flag.Int("port", 11435, "HTTP listen port")
++	port := flag.Int("port", 21435, "HTTP listen port")
+ 	var aliasAddresses aliasAddressFlags
+ 	flag.Var(&aliasAddresses, "alias-address", "optional loopback-only HTTP alias address (repeat for another loopback family)")
+ 	ignorePersistedPort := flag.Bool("ignore-persisted-port", false, "use --port even when a persisted port exists")
+diff a/ollama-proxy/proxy.go b/ollama-proxy/proxy.go
+--- a/ollama-proxy/proxy.go	2026-09-19 00:36:26
++++ b/ollama-proxy/proxy.go	2026-09-19 13:56:59
+@@ -1519,7 +1519,7 @@
+ // resulting owner list until a node returns a usable response.
+ //
+ // A node that resolves to this proxy's own listen address is dropped
+-// (self-forward guard): with the proxy on Ollama's default :11434, a
++// (self-forward guard): with the proxy on Ollama's default :21434, a
+ // local-Ollama advertisement can otherwise point right back at us and loop.
+ //
+ // Returns an empty slice when no forwarding target is available; the caller
+diff a/shared/noderec/noderec.go b/shared/noderec/noderec.go
+--- a/shared/noderec/noderec.go	2026-09-19 00:36:26
++++ b/shared/noderec/noderec.go	2026-09-19 13:56:59
+@@ -10,7 +10,7 @@
+ // whose TXT map carries a schema version, the node's identity, its LAN address,
+ // and one compact key per local service port, e.g.:
+ //
+-//	v=1;uuid=<hostUuid>;cluster-uuid=<clusterUuid>;ip=192.168.1.10;ni=14318;ol=11434;lm=1234;er=14319;wl=14320;cl=14321;em=14322
++//	v=1;uuid=<hostUuid>;cluster-uuid=<clusterUuid>;ip=192.168.1.10;ni=24318;ol=21434;lm=1234;er=24319;wl=24320;cl=24321;em=24322
+ //
+ // Design decisions this package encodes:
+ //   - SRV port is a fixed, NON-authoritative constant; consumers ignore it and
+@@ -43,7 +43,7 @@
+ 	// SRVPort is the fixed, non-authoritative SRV port on the _nvpair-node
+ 	// record. Consumers MUST ignore it and read each service's port from TXT;
+ 	// it exists only so the SRV record is well-formed and deterministic.
+-	SRVPort = 14318
++	SRVPort = 24318
+ 	// SchemaVersion is the current v= TXT schema version. It is for
+ 	// diagnostics/logs/tests and to disambiguate the record format across future
+ 	// wire changes — not for mixed-version compatibility (flag-day rollout).
+@@ -119,7 +119,7 @@
+ 	// TransportMTLSWhenClustered: cluster-scoped pin-based mTLS when the target
+ 	// node is clustered, else plain (nvpair-errors, nvpair-workload-manager).
+ 	TransportMTLSWhenClustered
+-	// TransportSplit: nvpair-cluster-manager's :14321 — a plain PIN-authenticated
++	// TransportSplit: nvpair-cluster-manager's :24321 — a plain PIN-authenticated
+ 	// pairing channel plus mTLS trusted endpoints on one port, demuxed by the
+ 	// first byte. cluster-manager owns this; generic consumers don't dial it.
+ 	TransportSplit

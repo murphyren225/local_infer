@@ -47,6 +47,17 @@ LOCAL = E("LINK_LOCAL", "http://127.0.0.1:7000")
 PAIR_HOME = Path(E("LINK_PAIR_HOME", str(Path.home() / "Library/Application Support/Nvidia Corporation/Personal AI Router")))
 DECIDER_LOG = ROOT / "logs" / "decisions.jsonl"
 RL_DIR = ROOT / "logs" / "rl"
+def chain_model() -> str:
+    """The model the chain routes on: LINK_MODEL, else the pool model in state/nodes.json."""
+    if E("LINK_MODEL"):
+        return E("LINK_MODEL")
+    try:
+        nodes = json.loads((ROOT / "state" / "nodes.json").read_text()).get("nodes", {})
+        return next(n["model"] for n in nodes.values() if n.get("pool") in ("strong", "weak"))
+    except (OSError, ValueError, StopIteration):
+        return "qwen3-1.7b"
+
+
 NO_THINK = {"chat_template_kwargs": {"enable_thinking": False}, "reasoning_effort": "none"}
 
 
@@ -198,9 +209,11 @@ def link3_pair_route() -> bool:
     c = Check("link 3: PAIR picks hardware between the two nodes")
     names = node_names()
     t0 = time.time()
-    lm = models(LM_PROXY)
-    if not c.ok(lm, f"LM-slot proxy models: {lm}"):
+    cat = models(LM_PROXY)
+    model = chain_model()
+    if not c.ok(model in cat, f"LM-slot proxy lists the chain model {model}: {cat}"):
         return c.result()
+    lm = [model]
     n = 8
     res = [None] * n
 
@@ -214,8 +227,7 @@ def link3_pair_route() -> bool:
     for w in ws:
         by[where(w, names)] = by.get(where(w, names), 0) + 1
     c.ok(len(ws) >= n, f"Mac PAIR ledger since start: {by}")
-    c.ok(by.get("this-mac", 0) > 0 and sum(v for k, v in by.items() if k != "this-mac") > 0,
-         "both nodes served part of the burst (PAIR chose hardware, not just the local node)")
+    c.ok(len(by) >= 2, f"{len(by)} nodes served part of the burst (PAIR chose hardware, not just one node)")
     return c.result()
 
 

@@ -66,7 +66,7 @@ That clones the repo and runs `bin/install.sh`: service venv + Switchyard; on a 
 vLLM plus the Qwen3-32B-AWQ and Qwen3-1.7B-FP8 weights (ModelScope; `--hf` for Hugging
 Face), on a Mac llama.cpp plus the 1.7B GGUF; then `cluster init` — the device is serving
 when the command returns. Further devices: `bin/install.sh --join http://<hub>:6006 --token JOIN-xxxx`;
-a remote GPU over SSH: `bin/cluster link-gpu "ssh -p 43314 root@gpu-host"`.
+a remote GPU over SSH: `bin/cluster link-gpu "ssh -p 22 root@gpu-host"`.
 `./cluster/test.sh all` runs the per-component tests.
 
 ### Personal side — one command on your own machine
@@ -139,3 +139,7 @@ cloud failover is wired but awaits a key.
 ## License
 
 MIT
+
+## Upstream frameworks
+
+Open-source frameworks are used unmodified wherever they offer an extension point. What we changed, and why, is listed in [docs/upstream-changes.md](docs/upstream-changes.md). Test guide: [docs/testing.md](docs/testing.md). Design: [docs/pipeline-design.md](docs/pipeline-design.md).

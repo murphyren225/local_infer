@@ -69,7 +69,7 @@ curl -fsSL https://raw.githubusercontent.com/murphyren225/local_infer/main/bin/b
 ModelScope 下载 Qwen3-32B-AWQ 与 Qwen3-1.7B-FP8（`--hf` 走 Hugging Face），Mac 编译
 llama.cpp 并下载 1.7B GGUF；然后自动 `cluster init`——命令返回时机器已在服务
 （32B 加载约 4 分钟）。后续设备：`bin/install.sh --join http://<Hub>:6006 --token JOIN-xxxx`；
-远端 GPU 经 SSH：`bin/cluster link-gpu "ssh -p 43314 root@gpu-host"`。
+远端 GPU 经 SSH：`bin/cluster link-gpu "ssh -p 22 root@gpu-host"`。
 `./cluster/test.sh all` 做分层测试。
 
 ### 个人端：自己电脑一条命令
@@ -149,3 +149,7 @@ import（详见 [docs/repo-layout.md](docs/repo-layout.md)）：
 ## License
 
 MIT
+
+## 对开源框架的改动
+
+开源框架有扩展点的地方一律原样使用。改了什么、为什么改，见 [docs/upstream-changes.md](docs/upstream-changes.md)。测试说明见 [docs/testing.md](docs/testing.md)，设计见 [docs/pipeline-design.md](docs/pipeline-design.md)。
