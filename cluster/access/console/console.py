@@ -226,9 +226,14 @@ async def pair_status():
     names = {self_id: "this-mac"}
     # a manual node's ledger id is its hostUuid; learn it from the desktop log is fragile, so label by exclusion
     counts: dict[str, int] = {}
+    last_seen: dict[str, int] = {}
     for w in ws:
-        counts[w.get("scheduledOn", "")] = counts.get(w.get("scheduledOn", ""), 0) + 1
-    remote_ids = [k for k in counts if k and k != self_id]
+        sid = w.get("scheduledOn") or ""
+        counts[sid] = counts.get(sid, 0) + 1
+        last_seen[sid] = max(last_seen.get(sid, 0), w.get("createdAt") or 0)
+    # remote ids ordered by most recent job: the live manual node is the one PAIR used last;
+    # stale ids (a peer that left the cluster weeks ago) sort to the back
+    remote_ids = sorted((k for k in counts if k and k != self_id), key=lambda k: -last_seen[k])
     nodes = [{"name": "this-mac", "kind": "self", "address": "127.0.0.1", "engine": "llama-server (LM slot)",
               "online": bool(await _models(PAIR_LOCAL_ENGINE)), "models": await _models(PAIR_LOCAL_ENGINE),
               "jobs": counts.get(self_id, 0),
