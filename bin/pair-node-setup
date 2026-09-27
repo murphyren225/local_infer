@@ -32,14 +32,25 @@ ln -sfn "$SGLANG_VENV" "$CFG/engine-bin/lmstudio/sglang-venv"     # manifest det
 
 echo "== libstdc++ (SGLang's JIT n-gram kernel needs GLIBCXX_3.4.30)"
 L=/root/miniconda3/lib/libstdc++.so.6; S=/usr/lib/x86_64-linux-gnu/libstdc++.so.6
-if [ -e "$L" ] && ! strings "$L" | grep -q GLIBCXX_3.4.30 && strings "$S" | grep -q GLIBCXX_3.4.30; then
+has() { grep -qa "GLIBCXX_3\.4\.30" "$1"; }   # grep on the file: `strings | grep -q` trips pipefail via SIGPIPE
+if [ -e "$L" ] && ! has "$L" && has "$S"; then
   [ -e "$L.pre-ngram" ] || cp -P "$L" "$L.pre-ngram"; ln -sfn "$S" "$L"; echo "  miniconda libstdc++ → system"
 fi
+echo "== ninja (SGLang JIT-compiles kernels at first start)"
+command -v ninja >/dev/null || { "$SGLANG_VENV/bin/pip" install -q ninja && ln -sfn "$SGLANG_VENV/bin/ninja" /usr/local/bin/ninja; }
 
 echo "== engine override → $CFG/engines/lmstudio.json"
-ARGS="[\"-m\",\"sglang.launch_server\",\"--model-path\",\"$MODEL_PATH\",\"--served-model-name\",\"$SERVED\",\"--host\",\"{host}\",\"--port\",\"{port}\",\"--context-length\",\"8192\",\"--mem-fraction-static\",\"0.5\",\"--reasoning-parser\",\"qwen3\""
-[ "$DRAFT" = 1 ] && ARGS="$ARGS,\"--speculative-algorithm\",\"NGRAM\",\"--speculative-num-draft-tokens\",\"8\""
-printf '{"engine":"lmstudio","runtime":{"port":30000,"args":[%s]}}\n' "$ARGS" > "$CFG/engines/lmstudio.json"
+PATH="/root/miniconda3/bin:$PATH"
+python3 - "$CFG/engines/lmstudio.json" "$MODEL_PATH" "$SERVED" "$DRAFT" << 'PY'
+import json, sys
+path, model, served, draft = sys.argv[1:5]
+args = ["-m", "sglang.launch_server", "--model-path", model, "--served-model-name", served,
+        "--host", "{host}", "--port", "{port}", "--context-length", "8192",
+        "--mem-fraction-static", "0.5", "--reasoning-parser", "qwen3"]
+if draft == "1":
+    args += ["--speculative-algorithm", "NGRAM", "--speculative-num-draft-tokens", "8"]
+json.dump({"engine": "lmstudio", "runtime": {"port": 30000, "args": args}}, open(path, "w"), indent=2)
+PY
 cat "$CFG/engines/lmstudio.json"
 
 echo "== start PAIR broker (pairctl serve on 127.0.0.1:17999)"
