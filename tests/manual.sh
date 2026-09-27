@@ -19,18 +19,18 @@ want=${1:-all}
 pick() { [ "$want" = all ] || [ "$want" = "$1" ]; }
 
 pick 1 && {
-title "link 1: engines direct"
+title "link 1: engines direct (same model on both machines)"
 run "curl -s http://127.0.0.1:1234/v1/models"
 run "curl -s http://127.0.0.1:1234/v1/chat/completions $J -d '{\"model\":\"qwen3-1.7b\",\"messages\":[{\"role\":\"user\",\"content\":\"Reply with exactly: sglang-ok\"}],\"max_tokens\":20,$NT}'"
-run "curl -s http://127.0.0.1:11434/api/tags | python3 -c \"import sys,json;print([m['name'] for m in json.load(sys.stdin)['models']])\""
-run "curl -s http://127.0.0.1:11435/v1/chat/completions $J -d '{\"model\":\"qwen3:1.7b\",\"messages\":[{\"role\":\"user\",\"content\":\"Reply with exactly: mac-ok\"}],\"max_tokens\":20,$NT}'"
+run "curl -s http://127.0.0.1:11235/v1/models | python3 -c \"import sys,json;print([m['id'] for m in json.load(sys.stdin)['data']])\""
+run "curl -s http://127.0.0.1:11235/v1/chat/completions $J -d '{\"model\":\"qwen3-1.7b\",\"messages\":[{\"role\":\"user\",\"content\":\"Reply with exactly: mac-ok\"}],\"max_tokens\":20,$NT}'"
 }
 
 pick 2 && {
-title "link 2: PAIR on the Mac sees the 4090"
+title "link 2: PAIR on the Mac sees both nodes on the LM slot"
 run "curl -s http://127.0.0.1:11234/v1/models"
-run "curl -s http://127.0.0.1:21434/v1/models | python3 -c \"import sys,json;print([m['id'] for m in json.load(sys.stdin)['data']])\""
 run "cat \"$PAIR_HOME/configs/manual-nodes.json\""
+run "cat \"$PAIR_HOME/engine-bin/engine-state.json\""
 }
 
 ledger() {
@@ -46,10 +46,9 @@ EOF
 }
 
 pick 3 && {
-title "link 3: PAIR picks hardware"
-run "curl -s http://127.0.0.1:21434/v1/chat/completions $J -d '{\"model\":\"qwen3:8b\",\"messages\":[{\"role\":\"user\",\"content\":\"Reply with exactly: via-4090\"}],\"max_tokens\":20,$NT}'"
-run "for i in 1 2 3 4 5 6; do curl -s -o /dev/null -w \"%{http_code} \" http://127.0.0.1:21434/v1/chat/completions $J -d '{\"model\":\"qwen3:1.7b\",\"messages\":[{\"role\":\"user\",\"content\":\"Say hi\"}],\"max_tokens\":6,$NT}' & done; wait; echo"
-echo "\$ (PAIR ledger, last 8 — flushed asynchronously, waiting 5s)"; sleep 5; ledger 8
+title "link 3: PAIR picks hardware between the two nodes"
+run "for i in 1 2 3 4 5 6 7 8; do curl -s -o /dev/null -w \"%{http_code} \" http://127.0.0.1:11234/v1/chat/completions $J -d '{\"model\":\"qwen3-1.7b\",\"messages\":[{\"role\":\"user\",\"content\":\"Say hi\"}],\"max_tokens\":6,$NT}' & done; wait; echo"
+echo "\$ (PAIR ledger, last 8 — flushed asynchronously, waiting 6s)"; sleep 6; ledger 8
 }
 
 pick 4 && {

@@ -5,9 +5,9 @@ then the whole chain:
     python3 tests/links.py all      # links 1..7 in order, then tests/e2e_chain.py
 
 Links (docs/pipeline-design.md §9):
-  1 engines      the engines themselves answer: 4090 SGLang, 4090 Ollama, Mac Ollama
-  2 pair-node    PAIR on the Mac sees the 4090: its models are in the Mac proxies' catalogues
-  3 pair-route   PAIR picks hardware: 4090-only models land on the 4090 (Mac ledger)
+  1 engines      the engines themselves answer: 4090 SGLang, Mac llama-server (same model, same alias)
+  2 pair-node    PAIR on the Mac sees both nodes on the LM slot: the model is in the LM proxy catalogue
+  3 pair-route   PAIR picks hardware: concurrent requests for the shared model land on both nodes
   4 decider      the decision service returns a normalized route + task_type and logs it
   5 model-route  Switchyard model routes (small / large) reach PAIR and an engine
   6 auto-route   Switchyard `auto`: decider consulted, latch to strong, RL traces written
@@ -15,11 +15,9 @@ Links (docs/pipeline-design.md §9):
 
 Every endpoint is an environment variable with the current Mac topology as default:
   LINK_SGLANG      4090 SGLang via tunnel            http://127.0.0.1:1234
-  LINK_BOX_OLLAMA  4090 Ollama engine via tunnel     http://127.0.0.1:11434
-  LINK_MAC_OLLAMA  Mac Ollama engine (PAIR-managed)  http://127.0.0.1:11435
+  LINK_MAC_ENGINE  Mac llama-server (PAIR LM slot)   http://127.0.0.1:11235
   LINK_NODEINFO    4090 node-info via tunnel         http://127.0.0.1:14318
   LINK_LM_PROXY    Mac PAIR LM-slot proxy            http://127.0.0.1:11234
-  LINK_OL_PROXY    Mac PAIR Ollama proxy             http://127.0.0.1:21434
   LINK_DECIDER     decider                           http://127.0.0.1:4100
   LINK_HUB         Switchyard on the Mac             http://127.0.0.1:4000
   LINK_LOCAL       personal-side local service       http://127.0.0.1:7000
@@ -40,11 +38,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 E = os.environ.get
 SGLANG = E("LINK_SGLANG", "http://127.0.0.1:1234")
-BOX_OLLAMA = E("LINK_BOX_OLLAMA", "http://127.0.0.1:11434")
-MAC_OLLAMA = E("LINK_MAC_OLLAMA", "http://127.0.0.1:11435")
+MAC_ENGINE = E("LINK_MAC_ENGINE", "http://127.0.0.1:11235")
 NODEINFO = E("LINK_NODEINFO", "http://127.0.0.1:14318")
 LM_PROXY = E("LINK_LM_PROXY", "http://127.0.0.1:11234")
-OL_PROXY = E("LINK_OL_PROXY", "http://127.0.0.1:21434")
 DECIDER = E("LINK_DECIDER", "http://127.0.0.1:4100")
 HUB = E("LINK_HUB", "http://127.0.0.1:4000")
 LOCAL = E("LINK_LOCAL", "http://127.0.0.1:7000")
@@ -168,75 +164,58 @@ def nonce() -> str:
 # ---------------------------------------------------------------- links
 
 def link1_engines() -> bool:
-    c = Check("link 1: engines answer directly")
+    c = Check("link 1: engines answer directly (same model on both machines)")
     ms = models(SGLANG)
     c.ok(ms, f"4090 SGLang {SGLANG}: models {ms}")
     if ms:
         code, _, ans, dt = chat(SGLANG, ms[0], "Reply with exactly: sglang-ok")
         c.ok("sglang-ok" in ans, f"4090 SGLang chat → {ans[:30]!r} ({dt:.1f}s)")
-    code, d = get(BOX_OLLAMA + "/api/tags")
-    tags = [m["name"] for m in d.get("models", [])] if code == 200 and isinstance(d, dict) else []
-    c.ok(tags, f"4090 Ollama {BOX_OLLAMA}: models {tags}")
-    code, d = get(MAC_OLLAMA + "/api/tags")
-    mtags = [m["name"] for m in d.get("models", [])] if code == 200 and isinstance(d, dict) else []
-    c.ok(mtags, f"Mac Ollama {MAC_OLLAMA}: models {mtags}")
-    if mtags:
-        code, _, ans, dt = chat(MAC_OLLAMA, mtags[0], "Reply with exactly: mac-ok")
-        c.ok("mac-ok" in ans, f"Mac Ollama chat → {ans[:30]!r} ({dt:.1f}s)")
+    mm = models(MAC_ENGINE)
+    c.ok(mm, f"Mac llama-server {MAC_ENGINE}: models {mm}")
+    if mm:
+        code, _, ans, dt = chat(MAC_ENGINE, mm[0], "Reply with exactly: mac-ok")
+        c.ok("mac-ok" in ans, f"Mac llama-server chat → {ans[:30]!r} ({dt:.1f}s)")
+    c.ok(ms and mm and set(ms) == set(mm), f"both machines advertise the same model name: {ms} == {mm}")
     return c.result()
 
 
 def link2_pair_node() -> bool:
-    c = Check("link 2: PAIR on the Mac sees the 4090 (manual node)")
+    c = Check("link 2: PAIR on the Mac sees both nodes on the LM slot")
     code, _ = get(NODEINFO + "/")
     c.ok(code in (200, 404), f"4090 node-info reachable at {NODEINFO} (http {code})")
-    box_sg = models(SGLANG)
     lm = models(LM_PROXY)
-    c.ok(lm and set(box_sg) <= set(lm), f"LM-slot proxy {LM_PROXY} lists the 4090's SGLang models: {lm}")
-    code, d = get(BOX_OLLAMA + "/api/tags")
-    box_ol = [m["name"] for m in d.get("models", [])] if code == 200 and isinstance(d, dict) else []
-    ol = models(OL_PROXY)
-    c.ok(ol and set(box_ol) <= set(ol), f"Ollama proxy {OL_PROXY} lists the 4090's Ollama models: {ol}")
+    c.ok(lm and set(models(SGLANG)) <= set(lm), f"LM-slot proxy {LM_PROXY} lists the shared model: {lm}")
+    c.ok(set(models(MAC_ENGINE)) <= set(lm), "the Mac's own LM-slot engine advertises the same model")
     mn = PAIR_HOME / "configs" / "manual-nodes.json"
     c.ok(mn.exists(), f"manual node persisted: {mn.read_text().strip() if mn.exists() else 'missing'}")
+    es = PAIR_HOME / "engine-bin" / "engine-state.json"
+    st = json.loads(es.read_text()) if es.exists() else {}
+    c.ok(st.get("engines", {}).get("lmstudio") is True, f"Mac LM slot desired-enabled: {st}")
     return c.result()
 
 
 def link3_pair_route() -> bool:
-    c = Check("link 3: PAIR picks hardware")
+    c = Check("link 3: PAIR picks hardware between the two nodes")
     names = node_names()
     t0 = time.time()
     lm = models(LM_PROXY)
-    if lm:
-        code, _, ans, dt = chat(LM_PROXY, lm[0], "Reply with exactly: via-lm")
-        c.ok("via-lm" in ans, f"LM-slot proxy model={lm[0]} → {ans[:20]!r} ({dt:.1f}s)")
-    code, d = get(MAC_OLLAMA + "/api/tags")
-    mac_ol = {m["name"] for m in d.get("models", [])} if code == 200 and isinstance(d, dict) else set()
-    box_only = [m for m in models(OL_PROXY) if m not in mac_ol]
-    if box_only:
-        code, _, ans, dt = chat(OL_PROXY, box_only[0], "Reply with exactly: via-box")
-        c.ok("via-box" in ans, f"Ollama proxy 4090-only model={box_only[0]} → {ans[:20]!r} ({dt:.1f}s)")
-    shared = [m for m in models(OL_PROXY) if m in mac_ol]
-    if shared:
-        n = 6
-        res = [None] * n
+    if not c.ok(lm, f"LM-slot proxy models: {lm}"):
+        return c.result()
+    n = 8
+    res = [None] * n
 
-        def one(i):
-            res[i] = chat(OL_PROXY, shared[0], f"Say hi {i}", max_tokens=6)[0]
-        ts = [threading.Thread(target=one, args=(i,)) for i in range(n)]
-        [t.start() for t in ts]; [t.join() for t in ts]
-        c.ok(all(r == 200 for r in res), f"{n} concurrent requests for shared model {shared[0]}: http {res}")
-    ws = ledger_wait(t0, 2 + (6 if shared else 0))
+    def one(i):
+        res[i] = chat(LM_PROXY, lm[0], f"Say hi {i}", max_tokens=6)[0]
+    ts = [threading.Thread(target=one, args=(i,)) for i in range(n)]
+    [t.start() for t in ts]; [t.join() for t in ts]
+    c.ok(all(r == 200 for r in res), f"{n} concurrent requests for {lm[0]}: http {res}")
+    ws = ledger_wait(t0, n)
     by = {}
     for w in ws:
-        by.setdefault(where(w, names), []).append(f"{w['model']}/{w['engine']}")
-    c.ok(ws, f"Mac PAIR ledger since start: {json.dumps(by, ensure_ascii=False)}")
-    if lm:
-        c.ok(any(w["engine"] == "lmstudio" and where(w, names) != "this-mac" for w in ws),
-             "LM-slot job ran on the remote node (4090 SGLang)")
-    if box_only:
-        c.ok(any(w["model"] == box_only[0] and where(w, names) != "this-mac" for w in ws),
-             f"4090-only model {box_only[0]} ran on the remote node")
+        by[where(w, names)] = by.get(where(w, names), 0) + 1
+    c.ok(len(ws) >= n, f"Mac PAIR ledger since start: {by}")
+    c.ok(by.get("this-mac", 0) > 0 and sum(v for k, v in by.items() if k != "this-mac") > 0,
+         "both nodes served part of the burst (PAIR chose hardware, not just the local node)")
     return c.result()
 
 
@@ -271,7 +250,7 @@ def link5_model_route() -> bool:
         served = d.get("model") if isinstance(d, dict) else "?"
         c.ok(f"{route}-ok" in ans, f"model={route} → served by {served} → {ans[:20]!r} ({dt:.1f}s)")
     ws = ledger_wait(t0, 2)
-    c.ok(len(ws) >= 2, "PAIR ledger: " + ", ".join(f"{w['model']}/{w['engine']}@{where(w, names)}" for w in ws))
+    c.ok(len(ws) >= 2, "PAIR ledger (small and large are the same model, PAIR picks the node): " + ", ".join(f"{w['model']}@{where(w, names)}" for w in ws))
     return c.result()
 
 

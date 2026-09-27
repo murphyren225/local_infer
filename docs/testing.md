@@ -3,17 +3,20 @@
 拓扑见 `pipeline-design.md` §9。一条请求的路：
 
 ```
-本机服务 :7000 → Switchyard :4000 → 决策器 :4100 → PAIR 代理（弱池 :21434 / 强池 :11234）→ 引擎
+本机服务 :7000 → Switchyard :4000 → 决策器 :4100 → PAIR LM 槽位代理 :11234 → {Mac llama-server, 4090 SGLang}
 ```
 
 Mac 是调度机。4090 通过 SSH 隧道接到 Mac 的 127.0.0.1 上，PAIR 把它当作一个手动节点。
+两台机器各跑**一个同名模型** `qwen3-1.7b`（Qwen3-1.7B）：4090 上是 SGLang，Mac 上是 llama-server，
+都放在 PAIR 的 LM 槽位里，所以在同一份名单上，PAIR 在两台之间按空闲选硬件。Switchyard 的弱池和强池
+指向同一个模型，升级只在 RL 轨迹里可见；第三台机器进来再放别的模型。
 下面七个环节从底往上，每一环只依赖它下面的环。**哪一环第一个失败，问题就在那一段**，上面的失败都是它引起的。
 
 所有命令在 Mac 上跑，不依赖当前目录。`tests/manual.sh` 把它们串起来自动跑；`tests/links.py` 是同一套检查的自动化版本。
 
 ## 0. 前提：隧道
 
-4090 上的端口只监听在 4090 本机。Mac 上凡是 1234、11434、14318 这几个端口，都是 ssh 隧道开的入口，请求会被原样转到 4090 的对应端口。隧道断了，这些端口就没人听，curl 什么都不打印。
+4090 上的端口只监听在 4090 本机。Mac 上凡是 1234、14318 这几个端口，都是 ssh 隧道开的入口，请求会被原样转到 4090 的对应端口。隧道断了，这些端口就没人听，curl 什么都不打印。
 
 ```bash
 curl -s -o /dev/null -w "%{http_code}\n" http://127.0.0.1:1234/v1/models
@@ -30,22 +33,18 @@ nohup /Users/murphyren/Desktop/local_infer/bin/tunnel-4090 > /Users/murphyren/De
 | Mac 上的端口 | 实际是谁 |
 |---|---|
 | 1234 | 4090 的 SGLang（隧道） |
-| 11434 | 4090 的 Ollama 引擎（隧道） |
 | 14318 | 4090 的 PAIR 节点信息（隧道） |
-| 11435 | Mac 自己的 Ollama 引擎，PAIR 管的 |
-| 11234 | Mac 上 PAIR 的 LM 槽位代理 |
-| 21434 | Mac 上 PAIR 的 Ollama 代理 |
+| 11235 | Mac 自己的 llama-server，PAIR 在 LM 槽位里拉起的 |
+| 11234 | Mac 上 PAIR 的 LM 槽位代理，两台机器的名单都在这 |
 | 4100 | 决策器 |
 | 4000 | Switchyard 网关 |
 | 7000 | 个人端本机服务 |
 
 ## 环节 1：引擎直连
 
-**这一环是什么。** 三个真正做推理的进程：4090 上的 SGLang（强池引擎，GPU）、4090 上的 Ollama（弱池引擎之一，GPU）、Mac 上的 Ollama（弱池引擎之一，CPU）。它们各自是一个 OpenAI 兼容的 HTTP 服务，加载了一个模型。
+**是什么。** 两个真正做推理的进程，各加载同一个模型 Qwen3-1.7B：4090 上的 SGLang（GPU，bf16 权重），Mac 上的 llama-server（CPU，GGUF 量化权重）。两个都是 OpenAI 兼容的 HTTP 服务，都把模型报成 `qwen3-1.7b`。名字必须一样，Switchyard 和 PAIR 都按名字找模型，差一个字符就是两个模型。
 
-**为什么先测它。** 绕开所有路由和调度，直接打引擎。如果这里不通，上面的每一环都会跟着失败，但原因和调度无关：模型没加载、显存不够、进程挂了、隧道断了。
-
-**测什么。** 两件事：引擎报的模型名是不是我们要的；引擎能不能按要求回一句话。模型名很重要，Switchyard 和 PAIR 都是按名字找引擎的，SGLang 这边叫 `qwen3-1.7b`，Ollama 那边叫 `qwen3:1.7b`，一个字符不同就是两个模型。
+**为什么先测它。** 绕开所有路由和调度直接打引擎。这里不通，上面每一环都会跟着失败，但原因和调度无关：模型没加载、显存不够、进程挂了、隧道断了。
 
 4090 的 SGLang，问它加载了什么：
 
@@ -53,7 +52,7 @@ nohup /Users/murphyren/Desktop/local_infer/bin/tunnel-4090 > /Users/murphyren/De
 curl -s http://127.0.0.1:1234/v1/models
 ```
 
-正常：`"id":"qwen3-1.7b"`，`"owned_by":"sglang"`，`"max_model_len":8192`。这是 SGLang 自己报的，8192 是启动参数里给的上下文长度。
+正常：`"id":"qwen3-1.7b"`，`"owned_by":"sglang"`。
 
 4090 的 SGLang，让它说一句话：
 
@@ -61,33 +60,31 @@ curl -s http://127.0.0.1:1234/v1/models
 curl -s http://127.0.0.1:1234/v1/chat/completions -H 'Content-Type: application/json' -d '{"model":"qwen3-1.7b","messages":[{"role":"user","content":"Reply with exactly: sglang-ok"}],"max_tokens":20,"chat_template_kwargs":{"enable_thinking":false}}'
 ```
 
-正常：`"content":"sglang-ok"`，`"finish_reason":"stop"`，`completion_tokens` 是个位数。`chat_template_kwargs.enable_thinking=false` 是关掉 Qwen3 的思考模式，不关的话 20 个 token 全花在思考上，content 是空的。
+正常：`"content":"sglang-ok"`。`enable_thinking=false` 关掉 Qwen3 的思考模式，不关的话 20 个 token 全花在思考上，content 是空的。
 
-4090 的 Ollama，问它有哪些模型。Ollama 有自己的原生接口，这里用它：
-
-```bash
-curl -s http://127.0.0.1:11434/api/tags
-```
-
-正常：`qwen3:1.7b` 和 `qwen3:8b` 两个。`qwen3:8b` 只有 4090 有，后面环节 3 靠它证明请求真的去了 4090。
-
-Mac 的 Ollama，让它说一句话：
+Mac 的 llama-server，问它加载了什么：
 
 ```bash
-curl -s http://127.0.0.1:11435/v1/chat/completions -H 'Content-Type: application/json' -d '{"model":"qwen3:1.7b","messages":[{"role":"user","content":"Reply with exactly: mac-ok"}],"max_tokens":20,"reasoning_effort":"none"}'
+curl -s http://127.0.0.1:11235/v1/models
 ```
 
-正常：`"content":"mac-ok"`，`"system_fingerprint":"fp_ollama"`，两三秒，因为是 CPU。`reasoning_effort: none` 是 Ollama 关思考的开关，Ollama 不认 `chat_template_kwargs`。
+正常：`data` 里有 `"id":"qwen3-1.7b"`。这个进程是 PAIR 的引擎管理器按 manifest 拉起来的，二进制和模型文件在 PAIR 引擎目录里的两个符号链接：`engine-bin/lmstudio/llama-server` 和 `model.gguf`。
 
-**挂了怎么读。** 前两条没输出：隧道断了，回到第 0 步。前两条有输出但模型名不对或 500：SGLang 进程有问题，去 4090 上看 PAIR 引擎日志。第四条没输出：Mac 上 PAIR 桌面端没在跑，或者它管的 Ollama 没起来。
+Mac 的 llama-server，让它说一句话：
 
-## 环节 2：PAIR 看见 4090
+```bash
+curl -s http://127.0.0.1:11235/v1/chat/completions -H 'Content-Type: application/json' -d '{"model":"qwen3-1.7b","messages":[{"role":"user","content":"Reply with exactly: mac-ok"}],"max_tokens":20,"chat_template_kwargs":{"enable_thinking":false}}'
+```
 
-**这一环是什么。** PAIR 在 Mac 上跑，维护一份"哪个节点上有哪个模型"的目录。4090 不在局域网，是作为"手动节点"加进去的：PAIR 每隔几秒去探测它的三个端口，节点信息 14318、Ollama 引擎 11434、LM 槽位引擎 1234，把探到的模型并进目录。目录对外的形式就是两个代理的 `/v1/models`。
+正常：`"content":"mac-ok"`，CPU 推理，小模型不到一秒。
 
-**为什么测它。** 环节 3 的调度是在目录里挑节点。目录里没有 4090，PAIR 就只能选 Mac 自己，"选硬件"无从谈起。
+**挂了怎么读。** 前两条没输出：隧道断了。有输出但 500：SGLang 进程有问题，去 4090 看 PAIR 引擎日志。后两条没输出：Mac 上 PAIR 桌面端没在跑，或 LM 槽位没被启用（看环节 2 的 `engine-state.json`）。
 
-**测什么。** 两个代理的清单里有没有只属于 4090 的模型；手动节点的配置在不在。
+## 环节 2：PAIR 看见两台机器
+
+**是什么。** PAIR 在 Mac 上维护"哪个节点上有哪个模型"的目录。它按引擎槽位分名单，我们把两台机器的引擎都放在 LM 槽位：Mac 自己的 llama-server 由本机引擎管理器汇报，4090 的 SGLang 由手动节点探测（每隔几秒探 4090 的 1234 和 14318）拿到。两台就在同一份名单上，名单对外的形式是 LM 槽位代理的 `/v1/models`。
+
+**为什么测它。** 环节 3 是在这份名单里挑节点。名单里少了谁，谁就永远不会被选。
 
 LM 槽位代理的清单：
 
@@ -95,51 +92,39 @@ LM 槽位代理的清单：
 curl -s http://127.0.0.1:11234/v1/models
 ```
 
-正常：只有一个 `qwen3-1.7b`，`owned_by` 是 `sglang`。Mac 上没有任何 LM 槽位引擎，这里出现的一切都来自 4090。所以这条命令有输出就直接证明 PAIR 探到了 4090 的 SGLang。
+正常：`qwen3-1.7b`。清单按模型名去重，两台机器同名所以只有一条。要看两台是否都在，用环节 3 的分流结果。
 
-Ollama 代理的清单：
-
-```bash
-curl -s http://127.0.0.1:21434/v1/models
-```
-
-正常：Mac 自己的几个（`qwen3:1.7b`、`moondream`、`qwen2.5` 系列）加上 4090 独有的 `qwen3:8b`。看到 `qwen3:8b` 就说明两台的 Ollama 目录合并了。
-
-手动节点的持久化配置，桌面端每次启动会读它并重新加节点：
+手动节点的持久化配置，桌面端每次启动读它重新加节点：
 
 ```bash
 cat ~/Library/Application\ Support/Nvidia\ Corporation/Personal\ AI\ Router/configs/manual-nodes.json
 ```
 
-正常：`[{"id":"autodl-4090","address":"127.0.0.1","name":"autodl-4090"}]`。地址是 127.0.0.1 不是笔误，PAIR 拨的是隧道入口。
+正常：`[{"id":"autodl-4090","address":"127.0.0.1","name":"autodl-4090"}]`。地址 127.0.0.1 不是笔误，PAIR 拨的是隧道入口。
 
-**挂了怎么读。** 环节 1 通、这里 4090 的模型不见了：等二十秒再试，PAIR 探测有周期；还不行就是 PAIR 桌面端的手动节点没加上，看配置文件在不在，重启桌面端。
+Mac 本机引擎的启用状态，PAIR 引擎管理器按它决定开机自启哪个引擎：
+
+```bash
+cat ~/Library/Application\ Support/Nvidia\ Corporation/Personal\ AI\ Router/engine-bin/engine-state.json
+```
+
+正常：`"lmstudio": true`，`"ollama": false`。一台机器一个模型，Ollama 关掉了。
+
+**挂了怎么读。** 环节 1 通、这里清单是空的或 503：等二十秒再试，探测有周期；还不行看桌面端是否在跑。
 
 ## 环节 3：PAIR 选硬件
 
-**这一环是什么。** PAIR 代理收到一个请求，看 `model` 字段，在目录里找出持有该模型的节点，按每个节点在途请求数挑一台，把请求转过去，完成后在账本里记一笔：哪个模型、哪个引擎、在哪台机器上跑的。这就是"选硬件"。
+**是什么。** PAIR 代理收到请求，看 `model` 字段，在名单里找出持有该模型的节点，按每个节点在途请求数挑一台转过去，完成后在账本里记一笔：哪个模型、在哪台机器上跑的。这就是"选硬件"。
 
-**为什么测它。** 这是整条链里唯一在两台机器之间做选择的地方。要证明两件事：只有 4090 有的模型一定去 4090；两台都有的模型会被分到两台。
-
-**测什么。** 用模型名控制候选集，然后读账本看实际去向。
-
-只有 4090 有的模型：
+**为什么这么测。** 两台机器同一个模型，单发一条永远是空闲的本机接，看不出选择。八条并发进去，PAIR 会把一部分派给 4090。账本里两台都出现，就证明了选择发生在两台之间。
 
 ```bash
-curl -s http://127.0.0.1:21434/v1/chat/completions -H 'Content-Type: application/json' -d '{"model":"qwen3:8b","messages":[{"role":"user","content":"Reply with exactly: via-4090"}],"max_tokens":20,"reasoning_effort":"none"}'
+for i in 1 2 3 4 5 6 7 8; do curl -s -o /dev/null -w "%{http_code} " http://127.0.0.1:11234/v1/chat/completions -H 'Content-Type: application/json' -d '{"model":"qwen3-1.7b","messages":[{"role":"user","content":"Say hi"}],"max_tokens":6,"chat_template_kwargs":{"enable_thinking":false}}' & done; wait; echo
 ```
 
-正常：`"content":"via-4090"`。Mac 上没有 8B，这一句只可能是 4090 算的。
+正常：八个 200。
 
-两台都有的模型，六条并发：
-
-```bash
-for i in 1 2 3 4 5 6; do curl -s -o /dev/null -w "%{http_code} " http://127.0.0.1:21434/v1/chat/completions -H 'Content-Type: application/json' -d '{"model":"qwen3:1.7b","messages":[{"role":"user","content":"Say hi"}],"max_tokens":6,"reasoning_effort":"none"}' & done; wait; echo
-```
-
-正常：六个 200。并发是故意的，串行发的话 PAIR 每次都会选空闲的本机，看不到分流。
-
-等五秒，读 Mac 上 PAIR 的账本。账本是异步落盘的，太早读会少几条：
+等六秒读账本，账本是异步落盘的，太早读会少几条：
 
 ```bash
 python3 -c "
@@ -151,9 +136,9 @@ for w in ws[-8:]: print(w['model'], w['engine'], w['state'], 'on', 'this-mac' if
 "
 ```
 
-正常：一行 `qwen3:8b ollama completed on autodl-4090`；六行 `qwen3:1.7b ollama completed`，一部分 `this-mac` 一部分 `autodl-4090`。分配比例不固定，PAIR 只按在途数量，不看两台快慢，这一点是它的已知局限。桌面端窗口左边的 Jobs 列表显示的就是这份账本，"Ran on autodl-4090" 那几条就是。
+正常：八行 `qwen3-1.7b lmstudio completed`，一部分 `this-mac` 一部分 `autodl-4090`，实测是四四开。`lmstudio` 是 PAIR 那个槽位的内部名字，实际跑的是 SGLang 和 llama-server。分配只按在途数量，不看两台快慢，这是 PAIR 的已知局限。桌面端窗口左边的 Jobs 列表显示的就是这份账本。
 
-**挂了怎么读。** `qwen3:8b` 返回 `no available node advertises the requested model`：目录里没有 4090，回环节 2。六条里有非 200：看哪台，Mac 的 Ollama 慢是正常的，超时看 curl 的 `-m`。账本里全是 this-mac：并发不够或者 4090 那一刻被判不可达，多跑几次。
+**挂了怎么读。** 有非 200：看是哪台慢，Mac 是 CPU。账本全是 this-mac：4090 那一刻被判不可达，多跑几次；持续如此看环节 2。
 
 ## 环节 4：决策器
 
@@ -199,23 +184,23 @@ tail -1 /Users/murphyren/Desktop/local_infer/logs/decisions.jsonl
 
 ## 环节 5：Switchyard 模型路由
 
-**这一环是什么。** Switchyard 是路由网关。它对外暴露几个路由名：`small`、`large` 是固定路由，直接映射到弱池、强池的目标；`auto` 是带判定的路由，环节 6 测。每个池的目标现在都是 PAIR 的一个代理，弱池指 Ollama 代理，强池指 LM 槽位代理，这个映射是 `cluster init` 按 `.env` 生成的，写在 `state/routes.yaml`。
+**这一环是什么。** Switchyard 是路由网关。它对外暴露几个路由名：`small`、`large` 是固定路由，直接映射到弱池、强池的目标；`auto` 是带判定的路由，环节 6 测。两个池的目标现在都是 PAIR 的 LM 槽位代理、同一个模型 `qwen3-1.7b`，这个映射是 `cluster init` 按 `.env` 生成的，写在 `state/routes.yaml`。
 
 **为什么先测固定路由。** 固定路由没有判定逻辑，只有"名字到目标"的映射。它通了，说明 Switchyard 到 PAIR 到引擎这三跳是连着的，环节 6 再出问题就只剩判定这一个变量。
 
-**测什么。** `small` 是不是落到弱池的模型，`large` 是不是落到强池的模型。看返回里的 `model` 字段，那是最终服务的引擎报的名字。
+**测什么。** `small` 和 `large` 都能拿到回复，返回里的 `model` 字段是最终服务的引擎报的名字，两条都应是 `qwen3-1.7b`；哪台机器算的看账本。
 
 ```bash
 curl -s http://127.0.0.1:4000/v1/chat/completions -H 'Content-Type: application/json' -d '{"model":"small","messages":[{"role":"user","content":"Reply with exactly: small-ok"}],"max_tokens":20,"reasoning_effort":"none","chat_template_kwargs":{"enable_thinking":false}}'
 ```
 
-正常：`"model":"qwen3:1.7b"`，`"content":"small-ok"`。冒号版的名字，说明是 Ollama 家族，也就是走了弱池的代理。
+正常：`"model":"qwen3-1.7b"`，`"content":"small-ok"`。
 
 ```bash
 curl -s http://127.0.0.1:4000/v1/chat/completions -H 'Content-Type: application/json' -d '{"model":"large","messages":[{"role":"user","content":"Reply with exactly: large-ok"}],"max_tokens":20,"reasoning_effort":"none","chat_template_kwargs":{"enable_thinking":false}}'
 ```
 
-正常：`"model":"qwen3-1.7b"`，`"content":"large-ok"`。横杠版的名字，SGLang 家族，走了强池的代理，只能是 4090。
+正常：`"model":"qwen3-1.7b"`，`"content":"large-ok"`。
 
 再跑一次环节 3 的账本命令，最后两条应该是 `qwen3:1.7b ollama` 和 `qwen3-1.7b lmstudio`。`lmstudio` 是 PAIR 里那个槽位的内部名字，实际跑的是 SGLang。
 
@@ -243,7 +228,7 @@ curl -s http://127.0.0.1:4000/v1/routing/stats | python3 -c "import sys,json;pri
 curl -s http://127.0.0.1:4000/v1/chat/completions -H 'Content-Type: application/json' -H 'x-task-type: code' -H 'x-switchyard-session-id: manual-201' -d '{"model":"auto","messages":[{"role":"user","content":"[201] Debug this race condition in the connection pool and prove the fix is correct."}],"max_tokens":40,"reasoning_effort":"none","chat_template_kwargs":{"enable_thinking":false}}' | python3 -c "import sys,json;print(json.load(sys.stdin)['model'])"
 ```
 
-正常：`qwen3:1.7b`。决策器给了 strong 0.7，但这是第一次，还没到两次确认，所以仍在弱池。
+正常：`qwen3-1.7b`。决策器给了 strong 0.7，但这是第一次，还没到两次确认，所以仍在弱池。
 
 第二轮：
 
@@ -285,7 +270,7 @@ weak {'weak': 0.3, 'strong': 0.7, 'cloud': 0.0}
 tail -2 /Users/murphyren/Desktop/local_infer/logs/decisions.jsonl | python3 -c "import sys,json;[print(json.loads(l)['state']['turn'], json.loads(l)['state']['task_type']) for l in sys.stdin]"
 ```
 
-**挂了怎么读。** 第一轮就是 `qwen3-1.7b`：数字没换，会话被复用了。第二轮 502：强池那一跳的问题，回环节 5 的 `large`。三轮都是 `qwen3:1.7b` 且 calls 加了 2：决策器被问了但没升级，看它返回的 strong 是不是低于 0.5，或者 `routes.yaml` 里 `confirmations` 不是 2。
+**挂了怎么读。** RL 轨迹第一轮就是 strong：数字没换，会话被复用了。第二轮 502：强池那一跳的问题，回环节 5 的 `large`。RL 轨迹三轮都是 weak 且 calls 加了 2：决策器被问了但没升级，看它返回的 strong 是不是低于 0.5，或者 `routes.yaml` 里 `confirmations` 不是 2。
 
 ## 环节 7：个人端本机服务
 
@@ -307,7 +292,7 @@ diff <(curl -s http://127.0.0.1:7000/v1/models) <(curl -s http://127.0.0.1:4000/
 curl -s http://127.0.0.1:7000/v1/chat/completions -H 'Content-Type: application/json' -H 'x-task-type: extract' -H 'x-switchyard-session-id: manual7-708' -d '{"model":"auto","messages":[{"role":"user","content":"[708] Reply with exactly: client-ok"}],"max_tokens":12,"reasoning_effort":"none","chat_template_kwargs":{"enable_thinking":false}}'
 ```
 
-正常：`"content":"client-ok"`，`"model":"qwen3:1.7b"`。第一轮，弱池。`[708]` 和 `manual7-708` 重跑时换数字。
+正常：`"content":"client-ok"`，`"model":"qwen3-1.7b"`。第一轮，弱池。`[708]` 和 `manual7-708` 重跑时换数字。
 
 ```bash
 tail -1 /Users/murphyren/Desktop/local_infer/logs/decisions.jsonl | python3 -c "import sys,json;print(json.load(sys.stdin)['state']['task_type'])"

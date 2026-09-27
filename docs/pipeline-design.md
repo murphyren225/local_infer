@@ -238,3 +238,11 @@ Pi / 本机服务 :7000 ──▶ Switchyard(fork) :4000 ──▶ decider :4100
 **逐环节测试**：`tests/links.py`，七个环节各一个函数，`python3 tests/links.py N` 单测一环，`python3 tests/links.py all` 七环依次跑完再跑整链 `tests/e2e_chain.py`。环节：1 引擎直连（4090 SGLang、4090 Ollama、Mac Ollama）；2 PAIR 看见 4090（两个代理的清单里有 4090 的模型）；3 PAIR 选硬件（4090 独有模型落在 4090，账本为证）；4 决策器（概率归一、任务类型、写日志）；5 Switchyard 模型路由（small/large 经 PAIR 到引擎）；6 Switchyard auto（判两次、锁强池、RL 轨迹 weak→strong→strong）；7 个人端本机服务（镜像 hub、透传 `x-task-type`）。端点全部是 `LINK_*` 环境变量，默认值就是本节拓扑。2026-09-27 全部 PASS。
 
 未做：反向隧道（4090 看见 Mac，目前不需要）；第二个 LM 家族节点（Mac 上可用 llama-server 顶 LM 槽位，让强池也有硬件选择）；正式跨网组网方案替代隧道。
+
+### 9.1 2026-09-27 改为"一台机器一个同名模型"
+
+用户定的形态：不做强弱分割，两台机器各跑一个同名模型 `qwen3-1.7b`，Switchyard 只说要哪个模型，PAIR 在两台之间按空闲选硬件。PAIR 的代理按引擎槽位分名单，所以两台的引擎都放进 LM 槽位：4090 = SGLang（bf16），Mac = llama-server（GGUF，SGLang 没有 macOS 版本；LM Studio 也不支持 Intel Mac）。4090 的 Ollama 和 Mac 的 Ollama 都停掉。
+
+PAIR fork 改动（`1034228`）：`lmstudio.json` 加 darwin 平台块，运行时是 `{install_dir}/llama-server -m {install_dir}/model.gguf --alias qwen3-1.7b`（二进制和 GGUF 是放在引擎目录里的符号链接）；`mergeOntoBundled` 让用户覆盖文件的 `runtime` 也压过平台块的 `runtime`（否则带平台运行时的引擎 set-port 存不住）；Mac 端口偏移树同步。Mac 引擎自启状态在 `engine-bin/engine-state.json`（`lmstudio: true, ollama: false`）。
+
+local_infer：`.env` 只剩 `PAIR_PROXY_URL=http://127.0.0.1:11234/v1`，两个池同一个模型。八条并发经 LM 代理：4090 四条、Mac 四条。`tests/links.py`、`tests/manual.sh`、`docs/testing.md` 已按新拓扑改写，七环加整链 PASS。
